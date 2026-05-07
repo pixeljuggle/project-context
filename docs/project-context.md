@@ -9,6 +9,7 @@ project-context-cli/
 │       └── release.yml
 ├── .gitignore
 ├── .goreleaser.yaml
+├── LICENSE
 ├── Makefile
 ├── README.md
 ├── cmd/
@@ -105,6 +106,7 @@ before:
 builds:
   - env:
       - CGO_ENABLED=0
+    main: ./cmd/project-context
     goos:
       - linux
       - darwin
@@ -125,7 +127,6 @@ archives:
     files:
       - LICENSE*
       - README.md
-      - CHANGELOG.md
 
 checksum:
   name_template: "checksums.txt"
@@ -148,6 +149,32 @@ changelog:
 release:
   draft: false
   prerelease: auto
+```
+
+### LICENSE
+
+```plaintext
+MIT License
+
+Copyright (c) 2026 alex
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 ```
 
 ### Makefile
@@ -230,9 +257,9 @@ test-build:
 ### README.md
 
 ```md
-# Project Context CLI
+# Project Context
 
-## A fast, zero-dependency CLI tool that generates a perfect `project-context.md` for LLMs, code reviews, or documentation.
+## A fast, zero-dependency tool that generates a perfect `project-context.md` for LLMs, code reviews, or documentation.
 
 ## Features
 
