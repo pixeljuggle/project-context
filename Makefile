@@ -10,7 +10,7 @@ install:
 	go install -ldflags "-s -w -X main.Version=$(VERSION)" ./cmd/project-context
 
 run:
-	go run ./cmd/project-context
+	go run ./cmd/project-context -I "project-context.md"
 
 all: linux darwin windows
 

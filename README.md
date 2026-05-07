@@ -119,3 +119,15 @@ Create this file in your project root for project-specific rules:
 | `-I`             | (repeatable)           | Additional ignore pattern               |
 | `--version`      | -                      | Show version and exit                   |
 | `--help`         | -                      | Show help                               |
+
+## Makefile Commands
+
+```bash
+make build          # Build for current OS/arch → ./bin/project-context
+make install        # Install globally via go install
+make run            # Run directly with go run
+make all            # Build all platforms (Linux, macOS, Windows + amd64/arm64)
+make clean          # Remove bin/ and dist/
+make test-build     # Quick version check after build
+```
+
