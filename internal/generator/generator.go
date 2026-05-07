@@ -24,11 +24,14 @@ func isIgnored(relPath string, patterns []string) bool {
 
 	relPath = filepath.ToSlash(relPath)
 
-	// HARD-CODED: Always ignore .git directory
-	if relPath == ".git" || strings.HasPrefix(relPath, ".git/") {
-		return true
+	// HARD-CODED: Always ignore .git directory and everything inside it.
+	if after := strings.TrimPrefix(relPath, ".git"); after != relPath {
+		if after == "" || strings.HasPrefix(after, "/") {
+			return true
+		}
 	}
 
+	// ... rest of the ignore logic
 	base := filepath.Base(relPath)
 
 	for _, pattern := range patterns {
@@ -37,9 +40,8 @@ func isIgnored(relPath string, patterns []string) bool {
 			continue
 		}
 
-		if strings.HasPrefix(pattern, "/") {
-			pattern = pattern[1:]
-		}
+		// Fixed: S1017 – use unconditional TrimPrefix instead of if + HasPrefix + slice
+		pattern = strings.TrimPrefix(pattern, "/")
 
 		trimmed := strings.TrimSuffix(pattern, "/")
 		isDirPattern := strings.HasSuffix(pattern, "/")
