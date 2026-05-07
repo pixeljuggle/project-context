@@ -123,11 +123,19 @@ Create this file in your project root for project-specific rules:
 ## Makefile Commands
 
 ```bash
-make build          # Build for current OS/arch → ./bin/project-context
-make install        # Install globally via go install
-make run            # Run directly with go run
-make all            # Build all platforms (Linux, macOS, Windows + amd64/arm64)
-make clean          # Remove bin/ and dist/
-make test-build     # Quick version check after build
+make build             # Build for current OS/arch → ./bin/project-context
+make install           # Install globally via go install
+make run               # Run directly with go run
+make all               # Build all platforms (Linux, macOS, Windows + amd64/arm64) → ./bin/
+make release           # Full local release test (creates ./dist/ with .tar.gz + .zip)
+make release-dry-run   # Only validate .goreleaser.yaml config (no build)
+make lint              # Run gofmt + go vet + staticcheck (recommended before committing)
+make clean             # Remove bin/ and dist/
+make test-build        # Quick version check after build
 ```
 
+**Note about releases & linting:**
+
+- `make release` uses GoReleaser in snapshot mode for local testing.
+- `make release-dry-run` validates the release config only.
+- `make lint` is the recommended pre-commit check (it will fail CI-style if formatting or issues are found).

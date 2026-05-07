@@ -1,32 +1,72 @@
-.PHONY: all build clean install run linux darwin windows
+GOBIN := $(shell go env GOPATH)/bin
+
+.PHONY: all build clean install run linux darwin windows release release-dry-run lint
 
 BINARY_NAME := project-context
-VERSION     ?= v0.3.0
+VERSION     ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 
+# Build for current platform → bin/
 build:
-	go build -ldflags "-s -w -X main.Version=$(VERSION)" -o $(BINARY_NAME) ./cmd/project-context
+	mkdir -p bin
+	go build -ldflags "-s -w -X main.Version=$(VERSION)" -o bin/$(BINARY_NAME) ./cmd/project-context
 
+# Install globally
 install:
 	go install -ldflags "-s -w -X main.Version=$(VERSION)" ./cmd/project-context
 
+# Run directly
 run:
-	go run ./cmd/project-context -I "project-context.md"
+	go run ./cmd/project-context
 
+# Build for all platforms → bin/
 all: linux darwin windows
 
 linux:
 	mkdir -p bin
-	GOOS=linux GOARCH=amd64 go build -ldflags "-s -w" -o bin/$(BINARY_NAME)-linux-amd64 ./cmd/project-context
-	GOOS=linux GOARCH=arm64 go build -ldflags "-s -w" -o bin/$(BINARY_NAME)-linux-arm64 ./cmd/project-context
+	GOOS=linux GOARCH=amd64 go build -ldflags "-s -w -X main.Version=$(VERSION)" -o bin/$(BINARY_NAME)-linux-amd64 ./cmd/project-context
+	GOOS=linux GOARCH=arm64 go build -ldflags "-s -w -X main.Version=$(VERSION)" -o bin/$(BINARY_NAME)-linux-arm64 ./cmd/project-context
 
 darwin:
 	mkdir -p bin
-	GOOS=darwin GOARCH=amd64 go build -ldflags "-s -w" -o bin/$(BINARY_NAME)-darwin-amd64 ./cmd/project-context
-	GOOS=darwin GOARCH=arm64 go build -ldflags "-s -w" -o bin/$(BINARY_NAME)-darwin-arm64 ./cmd/project-context
+	GOOS=darwin GOARCH=amd64 go build -ldflags "-s -w -X main.Version=$(VERSION)" -o bin/$(BINARY_NAME)-darwin-amd64 ./cmd/project-context
+	GOOS=darwin GOARCH=arm64 go build -ldflags "-s -w -X main.Version=$(VERSION)" -o bin/$(BINARY_NAME)-darwin-arm64 ./cmd/project-context
 
 windows:
 	mkdir -p bin
-	GOOS=windows GOARCH=amd64 go build -ldflags "-s -w" -o bin/$(BINARY_NAME)-windows-amd64.exe ./cmd/project-context
+	GOOS=windows GOARCH=amd64 go build -ldflags "-s -w -X main.Version=$(VERSION)" -o bin/$(BINARY_NAME)-windows-amd64.exe ./cmd/project-context
+
+
+# === Release targets (auto-install GoReleaser) ===
+release:
+	@$(call install-tool,goreleaser,github.com/goreleaser/goreleaser/v2@latest)
+	$(GOBIN)/goreleaser release --snapshot --clean
+
+release-dry-run:
+	@$(call install-tool,goreleaser,github.com/goreleaser/goreleaser/v2@latest)
+	$(GOBIN)/goreleaser check
+
+# === Lint target (auto-install staticcheck) ===
+lint:
+	@echo "Running gofmt..."
+	@test -z "$$(gofmt -l .)" || (echo "❌ gofmt issues found:" && gofmt -l . && exit 1)
+	@echo "Running go vet..."
+	go vet ./...
+	@echo "Running staticcheck..."
+	@$(call install-tool,staticcheck,honnef.co/go/tools/cmd/staticcheck@latest)
+	$(GOBIN)/staticcheck ./...
+	@echo "✅ All lint checks passed!"
+
+# Helper to auto-install Go tools
+define install-tool
+	@if ! test -x $(GOBIN)/$(1) && ! command -v $(1) >/dev/null 2>&1; then \
+		echo "🔧 Installing $(1)..."; \
+		go install $(2); \
+	fi
+endef
 
 clean:
-	rm -rf bin/ $(BINARY_NAME) $(BINARY_NAME).exe
+	rm -rf bin/ dist/ $(BINARY_NAME) $(BINARY_NAME).exe
+
+# Quick test after build
+test-build:
+	./bin/$(BINARY_NAME) --version

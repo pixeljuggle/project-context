@@ -19,16 +19,15 @@ builds:
       - -s -w -X main.Version={{.Version}}
 
 archives:
-  - formats: ["tar.gz"]
+  - format: tar.gz
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}"
+    format_overrides:
+      - goos: windows
+        format: zip
     files:
       - LICENSE*
       - README.md
       - CHANGELOG.md
-
-  - formats: ["zip"]
-    goos: [windows]
-    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}"
 
 checksum:
   name_template: "checksums.txt"
