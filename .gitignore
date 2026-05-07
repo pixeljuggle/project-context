@@ -1,0 +1,36 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Go build artifacts
+project-context
+project-context.exe
+
+# Build output
+bin/
+dist/
+
+# Test coverage
+*.out
+*.test
+*.prof
+
+# Dependency directories (if you ever vendor)
+vendor/
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+project-context.json
+project-context.md
