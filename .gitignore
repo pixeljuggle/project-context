@@ -31,6 +31,3 @@ vendor/
 .DS_Store
 Thumbs.db
 
-# Project specific
-project-context.json
-project-context.md
