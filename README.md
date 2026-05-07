@@ -1,10 +1,6 @@
 # Project Context CLI
 
-**A fast, zero-dependency CLI that generates perfect `project-context.md` files for LLMs.**
-
-Feed your entire codebase to Claude, Cursor, Grok, Aider, GPT-4o, or any other AI coding agent with one command.
-
----
+## A fast, zero-dependency CLI tool that generates a perfect `project-context.md` for LLMs, code reviews, or documentation.
 
 ## Features
 
@@ -18,27 +14,39 @@ Feed your entire codebase to Claude, Cursor, Grok, Aider, GPT-4o, or any other A
 - `--stdout` mode — perfect for piping directly to clipboard or AI tools
 - Zero external dependencies (pure Go stdlib)
 
----
-
 ## Installation
 
-### Option 1: Install globally (recommended)
+### From GitHub Releases (recommended)
+
+Download the latest binary for your OS from the [Releases page](https://github.com/pixeljuggle/project-context/releases).
+
+### With Go
 
 ```bash
 go install github.com/pixeljuggle/project-context/cmd/project-context@latest
 ```
 
-### Option 2: Build from source
+## Usage
 
 ```bash
-git clone https://github.com/pixeljuggle/project-context.git
-cd project-context
-make install
+project-context --version
+project-context -I "node_modules/" -I "dist/"
+project-context -config my-config.json
 ```
 
-Now you can run `project-context` from anywhere.
+## Automatic Releases
 
----
+This project uses **GoReleaser** + GitHub Actions.  
+Just run:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+A new release with binaries for Linux, macOS, and Windows will be created automatically.
+
+See `.goreleaser.yaml` and `.github/workflows/release.yml` for details.
 
 ## Quick Start
 
@@ -79,8 +87,6 @@ project-context -config my-context-config.json -output context-for-claude.md
 project-context --no-gitignore -I "node_modules/" -I "dist/"
 ```
 
----
-
 ## Configuration (`project-context.json`)
 
 Create this file in your project root for project-specific rules:
@@ -99,8 +105,6 @@ Create this file in your project root for project-specific rules:
 
 - `ignores`: `.gitignore`-style patterns (applied in addition to `.gitignore`)
 - `rules`: Per-folder or per-file rules (`content: false` = show in tree but skip content)
-
----
 
 ## Command-Line Flags
 

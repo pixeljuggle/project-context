@@ -5,9 +5,6 @@
 *.so
 *.dylib
 
-# Go build artifacts
-project-context
-project-context.exe
 
 # Build output
 bin/
