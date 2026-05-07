@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -21,7 +22,7 @@ type Config struct {
 func BuildMarkdown(tree string, contentFiles []string, root string, maxSizeBytes int64) string {
 	var md strings.Builder
 	md.WriteString("# Project Context\n\n")
-	md.WriteString("**Estimated tokens:** ~" + estimateTokens(tree+strings.Join(contentFiles, "")) + "\n\n")
+	md.WriteString("**Estimated tokens:** ~" + estimateTokens(tree, contentFiles, root, maxSizeBytes) + "\n\n")
 	md.WriteString("## Directory Tree\n\n")
 	md.WriteString("```\n")
 	md.WriteString(tree)
@@ -65,9 +66,20 @@ func BuildMarkdown(tree string, contentFiles []string, root string, maxSizeBytes
 	return md.String()
 }
 
-func estimateTokens(s string) string {
-	// Rough but useful estimate (4 chars ≈ 1 token)
-	return fmt.Sprintf("%d", len(s)/4+300)
+func estimateTokens(tree string, contentFiles []string, root string, maxSizeBytes int64) string {
+	total := len(tree)
+	for _, relPath := range contentFiles {
+		fullPath := filepath.Join(root, filepath.FromSlash(relPath))
+		data, err := os.ReadFile(fullPath)
+		if err != nil {
+			continue
+		}
+		if maxSizeBytes > 0 && int64(len(data)) > maxSizeBytes || isBinary(data) {
+			continue
+		}
+		total += len(data)
+	}
+	return fmt.Sprintf("%d", total/4+300)
 }
 
 func isBinary(data []byte) bool {
@@ -170,6 +182,10 @@ func GenerateTreeAndFiles(root string, ignorePatterns []string, rules map[string
 			}
 			valid = append(valid, entry)
 		}
+
+		sort.Slice(valid, func(i, j int) bool {
+			return valid[i].Name() < valid[j].Name()
+		})
 
 		for i, entry := range valid {
 			isLast := i == len(valid)-1

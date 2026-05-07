@@ -11,7 +11,7 @@ import (
 	"github.com/pixeljuggle/project-context/internal/generator"
 )
 
-var Version = "dev" // will be overridden by ldflags during release
+var Version = "dev" // overridden by ldflags
 
 type stringSlice []string
 
@@ -26,8 +26,10 @@ func main() {
 
 	rootDir := flag.String("root", ".", "Project root directory")
 	configFile := flag.String("config", "project-context.json", "Path to JSON config (optional)")
-	outputFile := flag.String("output", "project-context.md", "Output Markdown file")
+	outputFile := flag.String("output", "project-context.md", "Output Markdown filename")
 	noGitignore := flag.Bool("no-gitignore", false, "Skip loading .gitignore")
+	stdout := flag.Bool("stdout", false, "Print to stdout instead of writing file")
+	maxSizeKB := flag.Int("max-size", 1024, "Max file size in KB (0 = unlimited)")
 	versionFlag := flag.Bool("version", false, "Print version and exit")
 	flag.Var(&ignoreFlags, "I", "Ignore pattern (repeatable, .gitignore-style)")
 
@@ -90,56 +92,36 @@ func main() {
 	ignorePatterns = append(ignorePatterns, config.Ignores...)
 	ignorePatterns = append(ignorePatterns, ignoreFlags...)
 
-	// Generate
+	// Generate tree + content file list
 	treeStr, contentFiles, err := generator.GenerateTreeAndFiles(root, ignorePatterns, config.Rules)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error walking directory: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Build Markdown (unchanged)
-	var md strings.Builder
-	md.WriteString("# Project Context\n\n")
-	md.WriteString("## Directory Tree\n\n")
-	md.WriteString("```\n")
-	md.WriteString(treeStr)
-	md.WriteString("```\n\n")
-	md.WriteString("## File Contents\n\n")
+	maxSizeBytes := int64(0)
+	if *maxSizeKB > 0 {
+		maxSizeBytes = int64(*maxSizeKB) * 1024
+	}
 
-	for _, relPath := range contentFiles {
-		fullPath := filepath.Join(root, filepath.FromSlash(relPath))
-		data, err := os.ReadFile(fullPath)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: skipping %s: %v\n", relPath, err)
-			continue
-		}
+	mdContent := generator.BuildMarkdown(treeStr, contentFiles, root, maxSizeBytes)
 
-		content := string(data)
-		ext := filepath.Ext(relPath)
-		lang := strings.TrimPrefix(ext, ".")
-		if lang == "" {
-			lang = "plaintext"
-		}
-
-		md.WriteString("### " + relPath + "\n\n")
-		md.WriteString("```" + lang + "\n")
-		md.WriteString(content)
-		if !strings.HasSuffix(content, "\n") {
-			md.WriteString("\n")
-		}
-		md.WriteString("```\n\n")
+	if *stdout {
+		os.Stdout.WriteString(mdContent)
+		fmt.Fprintf(os.Stderr, "✅ Project context written to stdout (%d files processed)\n", len(contentFiles))
+		return
 	}
 
 	outPath := *outputFile
 	if !filepath.IsAbs(outPath) {
 		outPath = filepath.Join(root, outPath)
 	}
-	if err := os.WriteFile(outPath, []byte(md.String()), 0644); err != nil {
+	if err := os.WriteFile(outPath, []byte(mdContent), 0644); err != nil {
 		fmt.Fprintf(os.Stderr, "Error writing output: %v\n", err)
 		os.Exit(1)
 	}
 
-	fmt.Printf("Successfully created %s\n", outPath)
+	fmt.Printf("✅ Successfully created %s\n", outPath)
 	fmt.Printf("   • Tree + %d file contents included\n", len(contentFiles))
 	fmt.Printf("   • .git is always ignored (hard-coded)\n")
 }
