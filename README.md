@@ -1,6 +1,6 @@
-# Project Context CLI
+# Project Context
 
-## A fast, zero-dependency CLI tool that generates a perfect `project-context.md` for LLMs, code reviews, or documentation.
+## A fast, zero-dependency tool that generates a perfect `project-context.md` for LLMs, code reviews, or documentation.
 
 ## Features
 
