@@ -1,11 +1,14 @@
 # Project Context
 
+**Estimated tokens:** ~6653
+
 ## Directory Tree
 
 ```
 project-context-cli/
 ├── .github/
 │   └── workflows/
+│       ├── ci.yml
 │       └── release.yml
 ├── .gitignore
 ├── .goreleaser.yaml
@@ -19,10 +22,42 @@ project-context-cli/
 ├── go.mod
 └── internal/
     └── generator/
-        └── generator.go
+        ├── generator.go
+        └── generator_test.go
 ```
 
 ## File Contents
+
+### .github/workflows/ci.yml
+
+```yml
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: true
+
+      - name: Lint
+        run: make lint
+
+      - name: Test
+        run: go test ./... -race -count=1
+```
 
 ### .github/workflows/release.yml
 
@@ -149,6 +184,18 @@ changelog:
 release:
   draft: false
   prerelease: auto
+
+brews:
+  - repository:
+      owner: pixeljuggle
+      name: homebrew-project-context
+    homepage: https://github.com/pixeljuggle/project-context
+    description: A fast, zero-dependency tool that generates a perfect project-context.md for LLMs, code reviews, or documentation.
+    license: MIT
+    install: |
+      bin.install "project-context"
+    test: |
+      system "#{bin}/project-context --version"
 ```
 
 ### LICENSE
@@ -236,7 +283,7 @@ lint:
 	@echo "Running staticcheck..."
 	@$(call install-tool,staticcheck,honnef.co/go/tools/cmd/staticcheck@latest)
 	$(GOBIN)/staticcheck ./...
-	@echo "✅ All lint checks passed!"
+	@echo "All lint checks passed!"
 
 # Helper to auto-install Go tools
 define install-tool
@@ -256,149 +303,150 @@ test-build:
 
 ### README.md
 
-```md
+````md
 # Project Context
 
-## A fast, zero-dependency tool that generates a perfect `project-context.md` for LLMs, code reviews, or documentation.
+A zero-dependency command-line tool that generates a `project-context.md` file containing a recursive directory tree and the contents of relevant source files. The output is suitable for LLMs, code reviews, or documentation.
 
-## Features
+The tool supports full `.gitignore` rules (including negation with `!`), hard-coded ignores for common directories, per-file content rules, file-size limits, truncation, and extension filtering.
 
-- Recursive directory tree (Git-style)
-- All file contents in properly syntax-highlighted code blocks
-- **Safe Markdown handling** — uses 4-backtick fences for `.md` files so nested code blocks never break the output
-- Hard-coded ignores for common junk: `.git/`, `node_modules/`, `dist/`, `build/`, `target/`, `venv/`, `.venv/`, `.next/`, `__pycache__`, etc.
-- Full `.gitignore` support + custom `project-context.json` config
-- Smart skipping of binary files and large files (`--max-size`)
-- Token estimation (rough but useful for LLM context limits)
-- `--stdout` mode — perfect for piping directly to clipboard or AI tools
-- Zero external dependencies (pure Go stdlib)
+---
 
 ## Installation
 
-### From GitHub Releases (recommended)
-
-Download the latest binary for your OS from the [Releases page](https://github.com/pixeljuggle/project-context/releases).
-
-### With Go
+### For end users
 
 ```bash
+# Homebrew
+brew install pixeljuggle/project-context/project-context
+
+# Go
 go install github.com/pixeljuggle/project-context/cmd/project-context@latest
 ```
 
+Binaries for Linux, macOS, and Windows are available on the [Releases page](https://github.com/pixeljuggle/project-context/releases).
+
+---
+
 ## Usage
 
-```bash
-project-context --version
-project-context -I "node_modules/" -I "dist/"
-project-context -config my-config.json
-```
-
-## Automatic Releases
-
-This project uses **GoReleaser** + GitHub Actions.  
-Just run:
+Run the tool in the root of any project:
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
-```
-
-A new release with binaries for Linux, macOS, and Windows will be created automatically.
-
-See `.goreleaser.yaml` and `.github/workflows/release.yml` for details.
-
-## Quick Start
-
-```bash
-# 1. Go to any project
-cd ~/my-awesome-app
-
-# 2. Generate the context file
 project-context
+```
 
-# 3. (Optional) Pipe directly to clipboard for instant LLM use
+### Common workflows for fullstack TypeScript / Next.js projects
+
+```bash
+# Generate and copy to clipboard (most common)
 project-context --stdout | pbcopy
+
+# Limit size and truncate large files
+project-context --max-size 750 --truncate 150 --stdout | pbcopy
+
+# Include only source files
+project-context --ext .ts,.tsx,.js,.jsx,.json,.md --stdout | pbcopy
+
+# Additional ignores
+project-context -I "*.test.*" -I "*.spec.*" -I "coverage/" --stdout | pbcopy
 ```
 
-### Realistic everyday examples
+---
 
-**Example 1: Full context for a Next.js / TypeScript project**
+## Configuration
 
-```bash
-project-context --max-size 500 --stdout | pbcopy
-```
-
-**Example 2: Ignore extra patterns on the fly**
-
-```bash
-project-context -I "*.test.ts" -I "e2e/" -I "coverage/"
-```
-
-**Example 3: Use a custom config and output to a different name**
-
-```bash
-project-context -config my-context-config.json -output context-for-claude.md
-```
-
-**Example 4: Skip .gitignore and only use your own rules**
-
-```bash
-project-context --no-gitignore -I "node_modules/" -I "dist/"
-```
-
-## Configuration (`project-context.json`)
-
-Create this file in your project root for project-specific rules:
+Create `project-context.json` in the project root to set defaults:
 
 ```json
 {
-  "ignores": ["*.log", "*.tmp", "coverage/", "storybook-static/"],
+  "ignores": ["*.log", "*.tmp", "coverage/"],
   "rules": {
-    "docs/": { "content": false },
     "public/": { "content": false },
-    "src/assets/": { "content": false },
-    "internal/secret-config.ts": { "content": false }
-  }
+    "src/assets/": { "content": false }
+  },
+  "maxSizeKB": 500,
+  "truncateLines": 150
 }
 ```
 
-- `ignores`: `.gitignore`-style patterns (applied in addition to `.gitignore`)
-- `rules`: Per-folder or per-file rules (`content: false` = show in tree but skip content)
+- `ignores`: Additional `.gitignore`-style patterns (applied after `.gitignore`)
+- `rules`: Per-path rules (`content: false` shows the file in the tree but skips its content)
+- `maxSizeKB`: Default maximum file size in KB (0 = unlimited)
+- `truncateLines`: Default number of lines to keep for large files (0 = skip)
+
+Command-line flags override config values.
+
+---
 
 ## Command-Line Flags
 
-| Flag             | Default                | Description                             |
-| ---------------- | ---------------------- | --------------------------------------- |
-| `--stdout`       | false                  | Print to stdout instead of writing file |
-| `--max-size`     | 1024                   | Max file size in KB (0 = unlimited)     |
-| `--root`         | `.`                    | Project root directory                  |
-| `--config`       | `project-context.json` | Path to config file                     |
-| `--output`       | `project-context.md`   | Output markdown filename                |
-| `--no-gitignore` | false                  | Skip loading `.gitignore`               |
-| `-I`             | (repeatable)           | Additional ignore pattern               |
-| `--version`      | -                      | Show version and exit                   |
-| `--help`         | -                      | Show help                               |
+| Flag              | Default                | Description |
+|-------------------|------------------------|-----------|
+| `--stdout`        | false                  | Print output to stdout instead of writing a file |
+| `--max-size`      | 1024                   | Maximum file size in KB (0 = unlimited) |
+| `--truncate`      | 0                      | Truncate large files to this many lines (0 = skip) |
+| `--verbose`       | false                  | Print skipped or truncated files to stderr |
+| `--ext`           | (repeatable)           | Include only files with these extensions |
+| `--root`          | `.`                    | Project root directory |
+| `--config`        | `project-context.json` | Path to config file |
+| `--output`        | `project-context.md`   | Output filename |
+| `--no-gitignore`  | false                  | Do not load `.gitignore` |
+| `-I`              | (repeatable)           | Additional ignore pattern (supports `!` negation) |
+| `--version`       | —                      | Print version and exit |
 
-## Makefile Commands
+---
+
+## Development
+
+### For Go developers
 
 ```bash
-make build             # Build for current OS/arch → ./bin/project-context
-make install           # Install globally via go install
-make run               # Run directly with go run
-make all               # Build all platforms (Linux, macOS, Windows + amd64/arm64) → ./bin/
-make release           # Full local release test (creates ./dist/ with .tar.gz + .zip)
-make release-dry-run   # Only validate .goreleaser.yaml config (no build)
-make lint              # Run gofmt + go vet + staticcheck (recommended before committing)
-make clean             # Remove bin/ and dist/
-make test-build        # Quick version check after build
+git clone https://github.com/pixeljuggle/project-context.git
+cd project-context
+
+make build          # builds to ./bin/project-context
+make install        # installs to $GOPATH/bin
+make run            # runs against the project itself
+go run ./cmd/project-context --stdout
 ```
 
-**Note about releases & linting:**
+### Makefile targets
 
-- `make release` uses GoReleaser in snapshot mode for local testing.
-- `make release-dry-run` validates the release config only.
-- `make lint` is the recommended pre-commit check (it will fail CI-style if formatting or issues are found).
+| Command                | Purpose |
+|------------------------|---------|
+| `make build`           | Build for current platform |
+| `make all`             | Build all supported platforms |
+| `make lint`            | Run gofmt, vet, and staticcheck |
+| `make test`            | Run tests |
+| `make release`         | Local snapshot release |
+| `make release-dry-run` | Validate release configuration |
+| `make clean`           | Remove build artifacts |
+
+Tests are in `internal/generator/generator_test.go`.
+
+### Releasing
+
+```bash
+git tag v1.2.0
+git push origin v1.2.0
 ```
+
+GitHub Actions and GoReleaser handle cross-compilation, archives, checksums, and Homebrew tap publication.
+
+---
+
+## Contributing
+
+1. Fork and clone the repository.
+2. Make changes.
+3. Run `make lint && go test ./...`.
+4. Submit a pull request.
+
+---
+
+[Releases](https://github.com/pixeljuggle/project-context/releases) • [Issues](https://github.com/pixeljuggle/project-context/issues)
+````
 
 ### cmd/project-context/main.go
 
@@ -416,7 +464,7 @@ import (
 	"github.com/pixeljuggle/project-context/internal/generator"
 )
 
-var Version = "dev" // will be overridden by ldflags during release
+var Version = "dev" // overridden by ldflags
 
 type stringSlice []string
 
@@ -427,26 +475,31 @@ func (s *stringSlice) Set(value string) error {
 }
 
 func main() {
-	var ignoreFlags stringSlice
+	var ignoreFlags, includeExts stringSlice
 
 	rootDir := flag.String("root", ".", "Project root directory")
-	configFile := flag.String("config", "project-context.json", "Path to JSON config (optional)")
-	outputFile := flag.String("output", "project-context.md", "Output Markdown file")
+	configFile := flag.String("config", "project-context.json", "Path to JSON config")
+	outputFile := flag.String("output", "project-context.md", "Output Markdown filename")
 	noGitignore := flag.Bool("no-gitignore", false, "Skip loading .gitignore")
+	stdout := flag.Bool("stdout", false, "Print to stdout (perfect for clipboard)")
+	maxSizeKB := flag.Int("max-size", 1024, "Max file size in KB (0 = unlimited)")
+	truncateLines := flag.Int("truncate", 0, "Truncate large files to N lines instead of skipping (0 = skip)")
+	verbose := flag.Bool("verbose", false, "Verbose output (shows skipped/truncated files)")
 	versionFlag := flag.Bool("version", false, "Print version and exit")
-	flag.Var(&ignoreFlags, "I", "Ignore pattern (repeatable, .gitignore-style)")
+	flag.Var(&ignoreFlags, "I", "Additional ignore pattern (repeatable)")
+	flag.Var(&includeExts, "ext", "Only include files with these extensions (repeatable, e.g. .go .ts)")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [flags]\n\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "Generates project-context.md with directory tree + file contents.\n")
-		fmt.Fprintf(os.Stderr, ".git is hard-coded ignored.\n\n")
+		fmt.Fprintf(os.Stderr, "Generates a perfect project-context.md for LLMs.\n")
+		fmt.Fprintf(os.Stderr, ".git is hard-coded ignored. Full .gitignore negation (!) supported.\n\n")
 		flag.PrintDefaults()
 		fmt.Fprintf(os.Stderr, "\nExample config (project-context.json):\n")
 		fmt.Fprintf(os.Stderr, `{
-  "ignores": ["node_modules/", "dist/"],
-  "rules": {
-    "docs/": {"content": false}
-  }
+  "ignores": ["*.log", "coverage/"],
+  "rules": {"docs/": {"content": false}},
+  "maxSizeKB": 500,
+  "truncateLines": 200
 }`)
 		fmt.Fprintf(os.Stderr, "\n")
 	}
@@ -464,7 +517,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Load config
+	// Load config (now supports maxSizeKB + truncateLines)
 	config := generator.Config{Rules: make(map[string]generator.Rule)}
 	configPath := *configFile
 	if !filepath.IsAbs(configPath) {
@@ -476,6 +529,21 @@ func main() {
 		}
 	} else if !os.IsNotExist(err) {
 		fmt.Fprintf(os.Stderr, "Warning: could not read config %s: %v\n", configPath, err)
+	}
+
+	// Effective values (CLI flag wins; config provides sensible defaults)
+	effectiveMaxSizeKB := *maxSizeKB
+	if effectiveMaxSizeKB == 1024 && config.MaxSizeKB != 0 {
+		effectiveMaxSizeKB = config.MaxSizeKB
+	}
+	effectiveTruncate := *truncateLines
+	if effectiveTruncate == 0 && config.TruncateLines != 0 {
+		effectiveTruncate = config.TruncateLines
+	}
+
+	maxSizeBytes := int64(0)
+	if effectiveMaxSizeKB > 0 {
+		maxSizeBytes = int64(effectiveMaxSizeKB) * 1024
 	}
 
 	// Build ignore list
@@ -496,57 +564,32 @@ func main() {
 	ignorePatterns = append(ignorePatterns, ignoreFlags...)
 
 	// Generate
-	treeStr, contentFiles, err := generator.GenerateTreeAndFiles(root, ignorePatterns, config.Rules)
+	treeStr, contentFiles, err := generator.GenerateTreeAndFiles(root, ignorePatterns, config.Rules, includeExts)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error walking directory: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Build Markdown (unchanged)
-	var md strings.Builder
-	md.WriteString("# Project Context\n\n")
-	md.WriteString("## Directory Tree\n\n")
-	md.WriteString("```\n")
-	md.WriteString(treeStr)
-	md.WriteString("```\n\n")
-	md.WriteString("## File Contents\n\n")
+	mdContent := generator.BuildMarkdown(treeStr, contentFiles, root, maxSizeBytes, effectiveTruncate, *verbose)
 
-	for _, relPath := range contentFiles {
-		fullPath := filepath.Join(root, filepath.FromSlash(relPath))
-		data, err := os.ReadFile(fullPath)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: skipping %s: %v\n", relPath, err)
-			continue
-		}
-
-		content := string(data)
-		ext := filepath.Ext(relPath)
-		lang := strings.TrimPrefix(ext, ".")
-		if lang == "" {
-			lang = "plaintext"
-		}
-
-		md.WriteString("### " + relPath + "\n\n")
-		md.WriteString("```" + lang + "\n")
-		md.WriteString(content)
-		if !strings.HasSuffix(content, "\n") {
-			md.WriteString("\n")
-		}
-		md.WriteString("```\n\n")
+	if *stdout {
+		os.Stdout.WriteString(mdContent)
+		fmt.Fprintf(os.Stderr, "Project context written to stdout (%d files)\n", len(contentFiles))
+		return
 	}
 
 	outPath := *outputFile
 	if !filepath.IsAbs(outPath) {
 		outPath = filepath.Join(root, outPath)
 	}
-	if err := os.WriteFile(outPath, []byte(md.String()), 0644); err != nil {
+	if err := os.WriteFile(outPath, []byte(mdContent), 0644); err != nil {
 		fmt.Fprintf(os.Stderr, "Error writing output: %v\n", err)
 		os.Exit(1)
 	}
 
 	fmt.Printf("Successfully created %s\n", outPath)
-	fmt.Printf("   • Tree + %d file contents included\n", len(contentFiles))
-	fmt.Printf("   • .git is always ignored (hard-coded)\n")
+	fmt.Printf("   • Tree + %d file contents\n", len(contentFiles))
+	fmt.Printf("   • .git always ignored • negation (!) supported\n")
 }
 ```
 
@@ -568,6 +611,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -576,73 +620,43 @@ type Rule struct {
 }
 
 type Config struct {
-	Ignores []string        `json:"ignores,omitempty"`
-	Rules   map[string]Rule `json:"rules,omitempty"`
+	Ignores       []string        `json:"ignores,omitempty"`
+	Rules         map[string]Rule `json:"rules,omitempty"`
+	MaxSizeKB     int             `json:"maxSizeKB,omitempty"`
+	TruncateLines int             `json:"truncateLines,omitempty"`
 }
 
-// BuildMarkdown now safely handles Markdown files containing ``` code blocks
-func BuildMarkdown(tree string, contentFiles []string, root string, maxSizeBytes int64) string {
-	var md strings.Builder
-	md.WriteString("# Project Context\n\n")
-	md.WriteString("**Estimated tokens:** ~" + estimateTokens(tree+strings.Join(contentFiles, "")) + "\n\n")
-	md.WriteString("## Directory Tree\n\n")
-	md.WriteString("```\n")
-	md.WriteString(tree)
-	md.WriteString("```\n\n")
-	md.WriteString("## File Contents\n\n")
-
-	for _, relPath := range contentFiles {
-		fullPath := filepath.Join(root, filepath.FromSlash(relPath))
-		data, err := os.ReadFile(fullPath)
-		if err != nil {
-			continue
-		}
-
-		if maxSizeBytes > 0 && int64(len(data)) > maxSizeBytes || isBinary(data) {
-			md.WriteString("### " + relPath + "\n\n")
-			md.WriteString("_**Note:** File skipped (binary or exceeds --max-size limit)_\n\n")
-			continue
-		}
-
-		content := string(data)
-		ext := filepath.Ext(relPath)
-		lang := strings.TrimPrefix(ext, ".")
-		if lang == "" {
-			lang = "plaintext"
-		}
-
-		// === FIX: Use 4 backticks for any Markdown file ===
-		fence := "```"
-		if lang == "md" || lang == "markdown" || lang == "mdx" {
-			fence = "````"
-		}
-
-		md.WriteString("### " + relPath + "\n\n")
-		md.WriteString(fence + lang + "\n")
-		md.WriteString(content)
-		if !strings.HasSuffix(content, "\n") {
-			md.WriteString("\n")
-		}
-		md.WriteString(fence + "\n\n")
+// matchesPattern extracts the core matching logic (used by ignore + negation)
+func matchesPattern(pattern, relPath string) bool {
+	pattern = strings.TrimSpace(pattern)
+	if pattern == "" || strings.HasPrefix(pattern, "#") {
+		return false
 	}
-	return md.String()
-}
+	pattern = strings.TrimPrefix(pattern, "/")
+	trimmed := strings.TrimSuffix(pattern, "/")
+	isDirPattern := strings.HasSuffix(pattern, "/")
+	trimmed = strings.ReplaceAll(trimmed, "**", "*")
 
-func estimateTokens(s string) string {
-	// Rough but useful estimate (4 chars ≈ 1 token)
-	return fmt.Sprintf("%d", len(s)/4+300)
-}
-
-func isBinary(data []byte) bool {
-	for i := 0; i < len(data) && i < 512; i++ {
-		if data[i] == 0 {
+	base := filepath.Base(relPath)
+	var matched bool
+	var err error
+	if strings.Contains(trimmed, "/") {
+		matched, err = filepath.Match(trimmed, relPath)
+	} else {
+		matched, err = filepath.Match(trimmed, base)
+	}
+	if err == nil && matched {
+		return true
+	}
+	if isDirPattern {
+		if relPath == trimmed || strings.HasPrefix(relPath, trimmed+"/") {
 			return true
 		}
 	}
 	return false
 }
 
-// isIgnored with hard-coded common junk folders
+// isIgnored now fully supports .gitignore-style negation (!) with "last match wins"
 func isIgnored(relPath string, patterns []string) bool {
 	if relPath == "." || relPath == "" {
 		return false
@@ -650,7 +664,7 @@ func isIgnored(relPath string, patterns []string) bool {
 
 	relPath = filepath.ToSlash(relPath)
 
-	// Hard-coded ignores (S1017 compliant)
+	// Hard-coded ignores (still always applied first)
 	hardCoded := []string{
 		".git", "node_modules", "dist", "build", "target",
 		"venv", ".venv", ".next", "__pycache__", "coverage",
@@ -663,35 +677,23 @@ func isIgnored(relPath string, patterns []string) bool {
 		}
 	}
 
-	base := filepath.Base(relPath)
-
+	// Process all patterns in order - last match wins
 	for _, pattern := range patterns {
 		pattern = strings.TrimSpace(pattern)
-		if pattern == "" || strings.HasPrefix(pattern, "#") || strings.HasPrefix(pattern, "!") {
+		if pattern == "" || strings.HasPrefix(pattern, "#") {
 			continue
 		}
 
-		pattern = strings.TrimPrefix(pattern, "/")
-		trimmed := strings.TrimSuffix(pattern, "/")
-		isDirPattern := strings.HasSuffix(pattern, "/")
-
-		trimmed = strings.ReplaceAll(trimmed, "**", "*")
-
-		var matched bool
-		var err error
-		if strings.Contains(trimmed, "/") {
-			matched, err = filepath.Match(trimmed, relPath)
-		} else {
-			matched, err = filepath.Match(trimmed, base)
-		}
-		if err == nil && matched {
-			return true
+		isNegation := strings.HasPrefix(pattern, "!")
+		if isNegation {
+			pattern = strings.TrimPrefix(pattern, "!")
 		}
 
-		if isDirPattern {
-			if relPath == trimmed || strings.HasPrefix(relPath, trimmed+"/") {
-				return true
+		if matchesPattern(pattern, relPath) {
+			if isNegation {
+				return false // explicitly include
 			}
+			return true // explicitly ignore
 		}
 	}
 	return false
@@ -708,7 +710,27 @@ func getContentRule(relPath string, rules map[string]Rule) bool {
 	return true
 }
 
-func GenerateTreeAndFiles(root string, ignorePatterns []string, rules map[string]Rule) (tree string, contentFiles []string, err error) {
+func matchesAnyExt(relPath string, exts []string) bool {
+	if len(exts) == 0 {
+		return true
+	}
+	ext := strings.ToLower(filepath.Ext(relPath))
+	for _, e := range exts {
+		e = strings.ToLower(strings.TrimSpace(e))
+		if e == "" {
+			continue
+		}
+		if !strings.HasPrefix(e, ".") {
+			e = "." + e
+		}
+		if ext == e {
+			return true
+		}
+	}
+	return false
+}
+
+func GenerateTreeAndFiles(root string, ignorePatterns []string, rules map[string]Rule, includeExts []string) (tree string, contentFiles []string, err error) {
 	var treeBuilder strings.Builder
 	var files []string
 
@@ -733,6 +755,11 @@ func GenerateTreeAndFiles(root string, ignorePatterns []string, rules map[string
 			}
 			valid = append(valid, entry)
 		}
+
+		// === NEW: Alphabetical sorting (predictable & clean tree) ===
+		sort.Slice(valid, func(i, j int) bool {
+			return valid[i].Name() < valid[j].Name()
+		})
 
 		for i, entry := range valid {
 			isLast := i == len(valid)-1
@@ -759,7 +786,7 @@ func GenerateTreeAndFiles(root string, ignorePatterns []string, rules map[string
 				}
 			} else {
 				treeBuilder.WriteString("\n")
-				if getContentRule(relPath, rules) {
+				if getContentRule(relPath, rules) && matchesAnyExt(relPath, includeExts) {
 					files = append(files, relPath)
 				}
 			}
@@ -779,6 +806,192 @@ func GenerateTreeAndFiles(root string, ignorePatterns []string, rules map[string
 	}
 
 	return treeBuilder.String(), files, nil
+}
+
+// estimateTokens now actually counts real file content (much more accurate)
+func estimateTokens(tree string, contentFiles []string, root string, maxSizeBytes int64, truncateLines int) string {
+	total := len(tree)
+	for _, relPath := range contentFiles {
+		fullPath := filepath.Join(root, filepath.FromSlash(relPath))
+		data, err := os.ReadFile(fullPath)
+		if err != nil {
+			continue
+		}
+		size := len(data)
+		if maxSizeBytes > 0 && int64(size) > maxSizeBytes || isBinary(data) {
+			if truncateLines == 0 {
+				continue
+			}
+			// still count full size for rough estimate (conservative)
+		}
+		total += size
+	}
+	return fmt.Sprintf("%d", total/4+300)
+}
+
+func isBinary(data []byte) bool {
+	for i := 0; i < len(data) && i < 512; i++ {
+		if data[i] == 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// BuildMarkdown now supports truncate, verbose, accurate tokens, and safe Markdown
+func BuildMarkdown(tree string, contentFiles []string, root string, maxSizeBytes int64, truncateLines int, verbose bool) string {
+	var md strings.Builder
+	md.WriteString("# Project Context\n\n")
+	md.WriteString("**Estimated tokens:** ~" + estimateTokens(tree, contentFiles, root, maxSizeBytes, truncateLines) + "\n\n")
+	md.WriteString("## Directory Tree\n\n")
+	md.WriteString("```\n")
+	md.WriteString(tree)
+	md.WriteString("```\n\n")
+	md.WriteString("## File Contents\n\n")
+
+	for _, relPath := range contentFiles {
+		fullPath := filepath.Join(root, filepath.FromSlash(relPath))
+		data, err := os.ReadFile(fullPath)
+		if err != nil {
+			continue
+		}
+
+		content := string(data)
+		skipped := false
+		truncated := false
+
+		if maxSizeBytes > 0 && int64(len(data)) > maxSizeBytes || isBinary(data) {
+			if truncateLines > 0 {
+				lines := strings.Split(content, "\n")
+				if len(lines) > truncateLines {
+					content = strings.Join(lines[:truncateLines], "\n") + fmt.Sprintf("\n... (truncated to %d lines)", truncateLines)
+					truncated = true
+				}
+			} else {
+				skipped = true
+			}
+		}
+
+		if skipped {
+			if verbose {
+				fmt.Fprintf(os.Stderr, "  ⏭️  Skipped: %s (binary or exceeds --max-size)\n", relPath)
+			}
+			md.WriteString("### " + relPath + "\n\n")
+			md.WriteString("_**Note:** File skipped (binary or exceeds --max-size limit)_\n\n")
+			continue
+		}
+
+		if truncated && verbose {
+			fmt.Fprintf(os.Stderr, "  ✂️  Truncated: %s (first %d lines)\n", relPath, truncateLines)
+		}
+
+		ext := filepath.Ext(relPath)
+		lang := strings.TrimPrefix(ext, ".")
+		if lang == "" {
+			lang = "plaintext"
+		}
+
+		fence := "```"
+		if lang == "md" || lang == "markdown" || lang == "mdx" {
+			fence = "````"
+		}
+
+		md.WriteString("### " + relPath + "\n\n")
+		md.WriteString(fence + lang + "\n")
+		md.WriteString(content)
+		if !strings.HasSuffix(content, "\n") {
+			md.WriteString("\n")
+		}
+		md.WriteString(fence + "\n\n")
+	}
+	return md.String()
+}
+```
+
+### internal/generator/generator_test.go
+
+```go
+package generator
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func TestGenerateTreeAndFiles(t *testing.T) {
+	tmp := t.TempDir()
+
+	// Setup test project
+	os.MkdirAll(filepath.Join(tmp, "src"), 0755)
+	os.MkdirAll(filepath.Join(tmp, "docs"), 0755)
+	os.WriteFile(filepath.Join(tmp, "src/main.go"), []byte("package main\nfunc main(){}"), 0644)
+	os.WriteFile(filepath.Join(tmp, "README.md"), []byte("# Test\n"), 0644)
+	os.WriteFile(filepath.Join(tmp, "docs/secret.md"), []byte("secret"), 0644)
+	os.WriteFile(filepath.Join(tmp, ".git/config"), []byte("ignored"), 0644) // should be ignored
+	os.WriteFile(filepath.Join(tmp, "node_modules/foo.js"), []byte("ignored"), 0644)
+
+	tests := []struct {
+		name         string
+		ignores      []string
+		rules        map[string]Rule
+		includeExts  []string
+		wantContains []string
+		wantNot      []string
+	}{
+		{
+			name:         "basic tree + hard-coded ignores",
+			ignores:      nil,
+			rules:        nil,
+			includeExts:  nil,
+			wantContains: []string{"src/main.go", "README.md"},
+			wantNot:      []string{".git", "node_modules"},
+		},
+		{
+			name:         "negation support (!)",
+			ignores:      []string{"*.md", "!README.md"},
+			rules:        nil,
+			wantContains: []string{"README.md"},
+			wantNot:      []string{"docs/secret.md"},
+		},
+		{
+			name:         "content rule + include ext",
+			ignores:      nil,
+			rules:        map[string]Rule{"docs/": {Content: false}},
+			includeExts:  []string{".go"},
+			wantContains: []string{"src/main.go"},
+			wantNot:      []string{"README.md", "docs/secret.md"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tree, files, err := GenerateTreeAndFiles(tmp, tt.ignores, tt.rules, tt.includeExts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, want := range tt.wantContains {
+				if !strings.Contains(tree, want) && !contains(files, want) {
+					t.Errorf("missing %s in tree/files", want)
+				}
+			}
+			for _, not := range tt.wantNot {
+				if strings.Contains(tree, not) || contains(files, not) {
+					t.Errorf("unexpected %s found", not)
+				}
+			}
+		})
+	}
+}
+
+func contains(slice []string, s string) bool {
+	for _, v := range slice {
+		if v == s {
+			return true
+		}
+	}
+	return false
 }
 ```
 

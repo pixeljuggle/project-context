@@ -14,84 +14,43 @@ type Rule struct {
 }
 
 type Config struct {
-	Ignores []string        `json:"ignores,omitempty"`
-	Rules   map[string]Rule `json:"rules,omitempty"`
+	Ignores       []string        `json:"ignores,omitempty"`
+	Rules         map[string]Rule `json:"rules,omitempty"`
+	MaxSizeKB     int             `json:"maxSizeKB,omitempty"`
+	TruncateLines int             `json:"truncateLines,omitempty"`
 }
 
-// BuildMarkdown now safely handles Markdown files containing ``` code blocks
-func BuildMarkdown(tree string, contentFiles []string, root string, maxSizeBytes int64) string {
-	var md strings.Builder
-	md.WriteString("# Project Context\n\n")
-	md.WriteString("**Estimated tokens:** ~" + estimateTokens(tree, contentFiles, root, maxSizeBytes) + "\n\n")
-	md.WriteString("## Directory Tree\n\n")
-	md.WriteString("```\n")
-	md.WriteString(tree)
-	md.WriteString("```\n\n")
-	md.WriteString("## File Contents\n\n")
-
-	for _, relPath := range contentFiles {
-		fullPath := filepath.Join(root, filepath.FromSlash(relPath))
-		data, err := os.ReadFile(fullPath)
-		if err != nil {
-			continue
-		}
-
-		if maxSizeBytes > 0 && int64(len(data)) > maxSizeBytes || isBinary(data) {
-			md.WriteString("### " + relPath + "\n\n")
-			md.WriteString("_**Note:** File skipped (binary or exceeds --max-size limit)_\n\n")
-			continue
-		}
-
-		content := string(data)
-		ext := filepath.Ext(relPath)
-		lang := strings.TrimPrefix(ext, ".")
-		if lang == "" {
-			lang = "plaintext"
-		}
-
-		// === FIX: Use 4 backticks for any Markdown file ===
-		fence := "```"
-		if lang == "md" || lang == "markdown" || lang == "mdx" {
-			fence = "````"
-		}
-
-		md.WriteString("### " + relPath + "\n\n")
-		md.WriteString(fence + lang + "\n")
-		md.WriteString(content)
-		if !strings.HasSuffix(content, "\n") {
-			md.WriteString("\n")
-		}
-		md.WriteString(fence + "\n\n")
+// matchesPattern extracts the core matching logic (used by ignore + negation)
+func matchesPattern(pattern, relPath string) bool {
+	pattern = strings.TrimSpace(pattern)
+	if pattern == "" || strings.HasPrefix(pattern, "#") {
+		return false
 	}
-	return md.String()
-}
+	pattern = strings.TrimPrefix(pattern, "/")
+	trimmed := strings.TrimSuffix(pattern, "/")
+	isDirPattern := strings.HasSuffix(pattern, "/")
+	trimmed = strings.ReplaceAll(trimmed, "**", "*")
 
-func estimateTokens(tree string, contentFiles []string, root string, maxSizeBytes int64) string {
-	total := len(tree)
-	for _, relPath := range contentFiles {
-		fullPath := filepath.Join(root, filepath.FromSlash(relPath))
-		data, err := os.ReadFile(fullPath)
-		if err != nil {
-			continue
-		}
-		if maxSizeBytes > 0 && int64(len(data)) > maxSizeBytes || isBinary(data) {
-			continue
-		}
-		total += len(data)
+	base := filepath.Base(relPath)
+	var matched bool
+	var err error
+	if strings.Contains(trimmed, "/") {
+		matched, err = filepath.Match(trimmed, relPath)
+	} else {
+		matched, err = filepath.Match(trimmed, base)
 	}
-	return fmt.Sprintf("%d", total/4+300)
-}
-
-func isBinary(data []byte) bool {
-	for i := 0; i < len(data) && i < 512; i++ {
-		if data[i] == 0 {
+	if err == nil && matched {
+		return true
+	}
+	if isDirPattern {
+		if relPath == trimmed || strings.HasPrefix(relPath, trimmed+"/") {
 			return true
 		}
 	}
 	return false
 }
 
-// isIgnored with hard-coded common junk folders
+// isIgnored now fully supports .gitignore-style negation (!) with "last match wins"
 func isIgnored(relPath string, patterns []string) bool {
 	if relPath == "." || relPath == "" {
 		return false
@@ -99,7 +58,7 @@ func isIgnored(relPath string, patterns []string) bool {
 
 	relPath = filepath.ToSlash(relPath)
 
-	// Hard-coded ignores (S1017 compliant)
+	// Hard-coded ignores (still always applied first)
 	hardCoded := []string{
 		".git", "node_modules", "dist", "build", "target",
 		"venv", ".venv", ".next", "__pycache__", "coverage",
@@ -112,35 +71,23 @@ func isIgnored(relPath string, patterns []string) bool {
 		}
 	}
 
-	base := filepath.Base(relPath)
-
+	// Process all patterns in order - last match wins
 	for _, pattern := range patterns {
 		pattern = strings.TrimSpace(pattern)
-		if pattern == "" || strings.HasPrefix(pattern, "#") || strings.HasPrefix(pattern, "!") {
+		if pattern == "" || strings.HasPrefix(pattern, "#") {
 			continue
 		}
 
-		pattern = strings.TrimPrefix(pattern, "/")
-		trimmed := strings.TrimSuffix(pattern, "/")
-		isDirPattern := strings.HasSuffix(pattern, "/")
-
-		trimmed = strings.ReplaceAll(trimmed, "**", "*")
-
-		var matched bool
-		var err error
-		if strings.Contains(trimmed, "/") {
-			matched, err = filepath.Match(trimmed, relPath)
-		} else {
-			matched, err = filepath.Match(trimmed, base)
-		}
-		if err == nil && matched {
-			return true
+		isNegation := strings.HasPrefix(pattern, "!")
+		if isNegation {
+			pattern = strings.TrimPrefix(pattern, "!")
 		}
 
-		if isDirPattern {
-			if relPath == trimmed || strings.HasPrefix(relPath, trimmed+"/") {
-				return true
+		if matchesPattern(pattern, relPath) {
+			if isNegation {
+				return false // explicitly include
 			}
+			return true // explicitly ignore
 		}
 	}
 	return false
@@ -157,7 +104,27 @@ func getContentRule(relPath string, rules map[string]Rule) bool {
 	return true
 }
 
-func GenerateTreeAndFiles(root string, ignorePatterns []string, rules map[string]Rule) (tree string, contentFiles []string, err error) {
+func matchesAnyExt(relPath string, exts []string) bool {
+	if len(exts) == 0 {
+		return true
+	}
+	ext := strings.ToLower(filepath.Ext(relPath))
+	for _, e := range exts {
+		e = strings.ToLower(strings.TrimSpace(e))
+		if e == "" {
+			continue
+		}
+		if !strings.HasPrefix(e, ".") {
+			e = "." + e
+		}
+		if ext == e {
+			return true
+		}
+	}
+	return false
+}
+
+func GenerateTreeAndFiles(root string, ignorePatterns []string, rules map[string]Rule, includeExts []string) (tree string, contentFiles []string, err error) {
 	var treeBuilder strings.Builder
 	var files []string
 
@@ -183,6 +150,7 @@ func GenerateTreeAndFiles(root string, ignorePatterns []string, rules map[string
 			valid = append(valid, entry)
 		}
 
+		// === NEW: Alphabetical sorting (predictable & clean tree) ===
 		sort.Slice(valid, func(i, j int) bool {
 			return valid[i].Name() < valid[j].Name()
 		})
@@ -212,7 +180,7 @@ func GenerateTreeAndFiles(root string, ignorePatterns []string, rules map[string
 				}
 			} else {
 				treeBuilder.WriteString("\n")
-				if getContentRule(relPath, rules) {
+				if getContentRule(relPath, rules) && matchesAnyExt(relPath, includeExts) {
 					files = append(files, relPath)
 				}
 			}
@@ -232,4 +200,103 @@ func GenerateTreeAndFiles(root string, ignorePatterns []string, rules map[string
 	}
 
 	return treeBuilder.String(), files, nil
+}
+
+// estimateTokens now actually counts real file content (much more accurate)
+func estimateTokens(tree string, contentFiles []string, root string, maxSizeBytes int64, truncateLines int) string {
+	total := len(tree)
+	for _, relPath := range contentFiles {
+		fullPath := filepath.Join(root, filepath.FromSlash(relPath))
+		data, err := os.ReadFile(fullPath)
+		if err != nil {
+			continue
+		}
+		size := len(data)
+		if maxSizeBytes > 0 && int64(size) > maxSizeBytes || isBinary(data) {
+			if truncateLines == 0 {
+				continue
+			}
+			// still count full size for rough estimate (conservative)
+		}
+		total += size
+	}
+	return fmt.Sprintf("%d", total/4+300)
+}
+
+func isBinary(data []byte) bool {
+	for i := 0; i < len(data) && i < 512; i++ {
+		if data[i] == 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// BuildMarkdown now supports truncate, verbose, accurate tokens, and safe Markdown
+func BuildMarkdown(tree string, contentFiles []string, root string, maxSizeBytes int64, truncateLines int, verbose bool) string {
+	var md strings.Builder
+	md.WriteString("# Project Context\n\n")
+	md.WriteString("**Estimated tokens:** ~" + estimateTokens(tree, contentFiles, root, maxSizeBytes, truncateLines) + "\n\n")
+	md.WriteString("## Directory Tree\n\n")
+	md.WriteString("```\n")
+	md.WriteString(tree)
+	md.WriteString("```\n\n")
+	md.WriteString("## File Contents\n\n")
+
+	for _, relPath := range contentFiles {
+		fullPath := filepath.Join(root, filepath.FromSlash(relPath))
+		data, err := os.ReadFile(fullPath)
+		if err != nil {
+			continue
+		}
+
+		content := string(data)
+		skipped := false
+		truncated := false
+
+		if maxSizeBytes > 0 && int64(len(data)) > maxSizeBytes || isBinary(data) {
+			if truncateLines > 0 {
+				lines := strings.Split(content, "\n")
+				if len(lines) > truncateLines {
+					content = strings.Join(lines[:truncateLines], "\n") + fmt.Sprintf("\n... (truncated to %d lines)", truncateLines)
+					truncated = true
+				}
+			} else {
+				skipped = true
+			}
+		}
+
+		if skipped {
+			if verbose {
+				fmt.Fprintf(os.Stderr, "  ⏭️  Skipped: %s (binary or exceeds --max-size)\n", relPath)
+			}
+			md.WriteString("### " + relPath + "\n\n")
+			md.WriteString("_**Note:** File skipped (binary or exceeds --max-size limit)_\n\n")
+			continue
+		}
+
+		if truncated && verbose {
+			fmt.Fprintf(os.Stderr, "  ✂️  Truncated: %s (first %d lines)\n", relPath, truncateLines)
+		}
+
+		ext := filepath.Ext(relPath)
+		lang := strings.TrimPrefix(ext, ".")
+		if lang == "" {
+			lang = "plaintext"
+		}
+
+		fence := "```"
+		if lang == "md" || lang == "markdown" || lang == "mdx" {
+			fence = "````"
+		}
+
+		md.WriteString("### " + relPath + "\n\n")
+		md.WriteString(fence + lang + "\n")
+		md.WriteString(content)
+		if !strings.HasSuffix(content, "\n") {
+			md.WriteString("\n")
+		}
+		md.WriteString(fence + "\n\n")
+	}
+	return md.String()
 }

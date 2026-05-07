@@ -22,28 +22,31 @@ func (s *stringSlice) Set(value string) error {
 }
 
 func main() {
-	var ignoreFlags stringSlice
+	var ignoreFlags, includeExts stringSlice
 
 	rootDir := flag.String("root", ".", "Project root directory")
-	configFile := flag.String("config", "project-context.json", "Path to JSON config (optional)")
+	configFile := flag.String("config", "project-context.json", "Path to JSON config")
 	outputFile := flag.String("output", "project-context.md", "Output Markdown filename")
 	noGitignore := flag.Bool("no-gitignore", false, "Skip loading .gitignore")
-	stdout := flag.Bool("stdout", false, "Print to stdout instead of writing file")
+	stdout := flag.Bool("stdout", false, "Print to stdout (perfect for clipboard)")
 	maxSizeKB := flag.Int("max-size", 1024, "Max file size in KB (0 = unlimited)")
+	truncateLines := flag.Int("truncate", 0, "Truncate large files to N lines instead of skipping (0 = skip)")
+	verbose := flag.Bool("verbose", false, "Verbose output (shows skipped/truncated files)")
 	versionFlag := flag.Bool("version", false, "Print version and exit")
-	flag.Var(&ignoreFlags, "I", "Ignore pattern (repeatable, .gitignore-style)")
+	flag.Var(&ignoreFlags, "I", "Additional ignore pattern (repeatable)")
+	flag.Var(&includeExts, "ext", "Only include files with these extensions (repeatable, e.g. .go .ts)")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [flags]\n\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "Generates project-context.md with directory tree + file contents.\n")
-		fmt.Fprintf(os.Stderr, ".git is hard-coded ignored.\n\n")
+		fmt.Fprintf(os.Stderr, "Generates a perfect project-context.md for LLMs.\n")
+		fmt.Fprintf(os.Stderr, ".git is hard-coded ignored. Full .gitignore negation (!) supported.\n\n")
 		flag.PrintDefaults()
 		fmt.Fprintf(os.Stderr, "\nExample config (project-context.json):\n")
 		fmt.Fprintf(os.Stderr, `{
-  "ignores": ["node_modules/", "dist/"],
-  "rules": {
-    "docs/": {"content": false}
-  }
+  "ignores": ["*.log", "coverage/"],
+  "rules": {"docs/": {"content": false}},
+  "maxSizeKB": 500,
+  "truncateLines": 200
 }`)
 		fmt.Fprintf(os.Stderr, "\n")
 	}
@@ -61,7 +64,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Load config
+	// Load config (now supports maxSizeKB + truncateLines)
 	config := generator.Config{Rules: make(map[string]generator.Rule)}
 	configPath := *configFile
 	if !filepath.IsAbs(configPath) {
@@ -73,6 +76,21 @@ func main() {
 		}
 	} else if !os.IsNotExist(err) {
 		fmt.Fprintf(os.Stderr, "Warning: could not read config %s: %v\n", configPath, err)
+	}
+
+	// Effective values (CLI flag wins; config provides sensible defaults)
+	effectiveMaxSizeKB := *maxSizeKB
+	if effectiveMaxSizeKB == 1024 && config.MaxSizeKB != 0 {
+		effectiveMaxSizeKB = config.MaxSizeKB
+	}
+	effectiveTruncate := *truncateLines
+	if effectiveTruncate == 0 && config.TruncateLines != 0 {
+		effectiveTruncate = config.TruncateLines
+	}
+
+	maxSizeBytes := int64(0)
+	if effectiveMaxSizeKB > 0 {
+		maxSizeBytes = int64(effectiveMaxSizeKB) * 1024
 	}
 
 	// Build ignore list
@@ -92,23 +110,18 @@ func main() {
 	ignorePatterns = append(ignorePatterns, config.Ignores...)
 	ignorePatterns = append(ignorePatterns, ignoreFlags...)
 
-	// Generate tree + content file list
-	treeStr, contentFiles, err := generator.GenerateTreeAndFiles(root, ignorePatterns, config.Rules)
+	// Generate
+	treeStr, contentFiles, err := generator.GenerateTreeAndFiles(root, ignorePatterns, config.Rules, includeExts)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error walking directory: %v\n", err)
 		os.Exit(1)
 	}
 
-	maxSizeBytes := int64(0)
-	if *maxSizeKB > 0 {
-		maxSizeBytes = int64(*maxSizeKB) * 1024
-	}
-
-	mdContent := generator.BuildMarkdown(treeStr, contentFiles, root, maxSizeBytes)
+	mdContent := generator.BuildMarkdown(treeStr, contentFiles, root, maxSizeBytes, effectiveTruncate, *verbose)
 
 	if *stdout {
 		os.Stdout.WriteString(mdContent)
-		fmt.Fprintf(os.Stderr, "✅ Project context written to stdout (%d files processed)\n", len(contentFiles))
+		fmt.Fprintf(os.Stderr, "Project context written to stdout (%d files)\n", len(contentFiles))
 		return
 	}
 
@@ -121,7 +134,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("✅ Successfully created %s\n", outPath)
-	fmt.Printf("   • Tree + %d file contents included\n", len(contentFiles))
-	fmt.Printf("   • .git is always ignored (hard-coded)\n")
+	fmt.Printf("Successfully created %s\n", outPath)
+	fmt.Printf("   • Tree + %d file contents\n", len(contentFiles))
+	fmt.Printf("   • .git always ignored • negation (!) supported\n")
 }

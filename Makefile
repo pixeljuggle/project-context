@@ -54,7 +54,7 @@ lint:
 	@echo "Running staticcheck..."
 	@$(call install-tool,staticcheck,honnef.co/go/tools/cmd/staticcheck@latest)
 	$(GOBIN)/staticcheck ./...
-	@echo "✅ All lint checks passed!"
+	@echo "All lint checks passed!"
 
 # Helper to auto-install Go tools
 define install-tool
