@@ -16,7 +16,7 @@ install:
 
 # Run directly
 run:
-	go run ./cmd/project-context
+	go run ./cmd/project-context -I "docs/project-context.md" -output "docs/project-context.md" 
 
 # Build for all platforms → bin/
 all: linux darwin windows
