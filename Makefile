@@ -1,21 +1,17 @@
 .PHONY: all build clean install run linux darwin windows
 
 BINARY_NAME := project-context
-VERSION     ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+VERSION     ?= v0.3.0
 
-# Build for current platform
 build:
 	go build -ldflags "-s -w -X main.Version=$(VERSION)" -o $(BINARY_NAME) ./cmd/project-context
 
-# Install globally
 install:
 	go install -ldflags "-s -w -X main.Version=$(VERSION)" ./cmd/project-context
 
-# Run directly
 run:
 	go run ./cmd/project-context
 
-# Build for all popular platforms
 all: linux darwin windows
 
 linux:

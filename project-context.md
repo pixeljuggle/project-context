@@ -1,5 +1,7 @@
 # Project Context
 
+**Estimated tokens:** ~363
+
 ## Directory Tree
 
 ```
@@ -63,21 +65,17 @@ project-context.md
 .PHONY: all build clean install run linux darwin windows
 
 BINARY_NAME := project-context
-VERSION     ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+VERSION     ?= v0.3.0
 
-# Build for current platform
 build:
 	go build -ldflags "-s -w -X main.Version=$(VERSION)" -o $(BINARY_NAME) ./cmd/project-context
 
-# Install globally
 install:
 	go install -ldflags "-s -w -X main.Version=$(VERSION)" ./cmd/project-context
 
-# Run directly
 run:
 	go run ./cmd/project-context
 
-# Build for all popular platforms
 all: linux darwin windows
 
 linux:
@@ -100,66 +98,44 @@ clean:
 
 ### README.md
 
-```md
+````md
 # Project Context CLI
 
-A fast, zero-dependency CLI tool that generates a perfect `project-context.md` file for LLMs, code reviews, or documentation.
+Fast, zero-dependency tool that generates a clean `project-context.md` perfect for LLMs (Claude, Cursor, Aider, Grok, etc.).
 
-It includes:
+### Features
 
-- Beautiful recursive directory tree
-- All file contents in properly tagged code blocks
-- Full support for `.gitignore`
-- Hard-coded ignore for `.git` (and everything inside it)
-- JSON config for custom ignores + per-folder rules
-- Extra ignore rules via `-I` flag
+- Beautiful directory tree
+- File contents in properly tagged code blocks
+- Hard-coded ignores for `.git`, `node_modules`, `dist`, `build`, `target`, `venv`, `.next`, etc.
+- Smart skipping of binary files and large files (`--max-size`)
+- Token count estimation
+- `--stdout` support (pipe to clipboard/LLM)
+- Full `.gitignore` + `project-context.json` support
+- Colored terminal UX
 
-## Installation
-
-```bash
-# Install latest version globally
-go install github.com/pixeljuggle/project-context/cmd/project-context@latest
-
-# Or build from source
-git clone https://github.com/pixeljuggle/project-context.git
-cd project-context
-make install
-```
-
-## Quick Start
+### Quick Start
 
 ```bash
-# In any project
+# Normal use
 project-context
 
+# Pipe directly to LLM / clipboard
+project-context --stdout | pbcopy
+
 # Custom options
-project-context -root ./my-app -config my-config.json -I "*.tmp" -I "build/"
+project-context --max-size 500 --stdout
 ```
 
-## Configuration (`project-context.json`)
+### New Flags
 
-```json
-{
-  "ignores": ["node_modules/", "dist/", "*.log"],
-  "rules": {
-    "docs/": { "content": false },
-    "internal/secret.txt": { "content": false }
-  }
-}
-```
+- `--stdout` → Print to stdout instead of file
+- `--max-size int` → Max file size in KB for content (default 1024, 0 = unlimited)
+- `--version` → Show version
+- All previous flags still work (`-I`, `-config`, etc.)
 
-## Makefile Commands
-
-```bash
-make build          # Build for current OS/arch
-make install        # Install to $GOPATH/bin
-make run            # Run directly
-make all            # Build all popular platforms
-make clean
-```
-
-See `Makefile` for full cross-compilation targets (Linux, macOS, Windows, arm64, etc.).
-```
+See `project-context --help` for full details.
+````
 
 ### go.mod
 
@@ -175,6 +151,7 @@ go 1.26.1
 package generator
 
 import (
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -190,7 +167,69 @@ type Config struct {
 	Rules   map[string]Rule `json:"rules,omitempty"`
 }
 
-// isIgnored hard-codes .git (and everything under it)
+// BuildMarkdown now safely handles Markdown files containing ``` code blocks
+func BuildMarkdown(tree string, contentFiles []string, root string, maxSizeBytes int64) string {
+	var md strings.Builder
+	md.WriteString("# Project Context\n\n")
+	md.WriteString("**Estimated tokens:** ~" + estimateTokens(tree+strings.Join(contentFiles, "")) + "\n\n")
+	md.WriteString("## Directory Tree\n\n")
+	md.WriteString("```\n")
+	md.WriteString(tree)
+	md.WriteString("```\n\n")
+	md.WriteString("## File Contents\n\n")
+
+	for _, relPath := range contentFiles {
+		fullPath := filepath.Join(root, filepath.FromSlash(relPath))
+		data, err := os.ReadFile(fullPath)
+		if err != nil {
+			continue
+		}
+
+		if maxSizeBytes > 0 && int64(len(data)) > maxSizeBytes || isBinary(data) {
+			md.WriteString("### " + relPath + "\n\n")
+			md.WriteString("_**Note:** File skipped (binary or exceeds --max-size limit)_\n\n")
+			continue
+		}
+
+		content := string(data)
+		ext := filepath.Ext(relPath)
+		lang := strings.TrimPrefix(ext, ".")
+		if lang == "" {
+			lang = "plaintext"
+		}
+
+		// === FIX: Use 4 backticks for any Markdown file ===
+		fence := "```"
+		if lang == "md" || lang == "markdown" || lang == "mdx" {
+			fence = "````"
+		}
+
+		md.WriteString("### " + relPath + "\n\n")
+		md.WriteString(fence + lang + "\n")
+		md.WriteString(content)
+		if !strings.HasSuffix(content, "\n") {
+			md.WriteString("\n")
+		}
+		md.WriteString(fence + "\n\n")
+	}
+	return md.String()
+}
+
+func estimateTokens(s string) string {
+	// Rough but useful estimate (4 chars ≈ 1 token)
+	return fmt.Sprintf("%d", len(s)/4+300)
+}
+
+func isBinary(data []byte) bool {
+	for i := 0; i < len(data) && i < 512; i++ {
+		if data[i] == 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// isIgnored with hard-coded common junk folders
 func isIgnored(relPath string, patterns []string) bool {
 	if relPath == "." || relPath == "" {
 		return false
@@ -198,14 +237,19 @@ func isIgnored(relPath string, patterns []string) bool {
 
 	relPath = filepath.ToSlash(relPath)
 
-	// HARD-CODED: Always ignore .git directory and everything inside it.
-	if after := strings.TrimPrefix(relPath, ".git"); after != relPath {
-		if after == "" || strings.HasPrefix(after, "/") {
-			return true
+	// Hard-coded ignores (S1017 compliant)
+	hardCoded := []string{
+		".git", "node_modules", "dist", "build", "target",
+		"venv", ".venv", ".next", "__pycache__", "coverage",
+	}
+	for _, d := range hardCoded {
+		if after := strings.TrimPrefix(relPath, d); after != relPath {
+			if after == "" || strings.HasPrefix(after, "/") {
+				return true
+			}
 		}
 	}
 
-	// ... rest of the ignore logic
 	base := filepath.Base(relPath)
 
 	for _, pattern := range patterns {
@@ -214,17 +258,14 @@ func isIgnored(relPath string, patterns []string) bool {
 			continue
 		}
 
-		// Fixed: S1017 – use unconditional TrimPrefix instead of if + HasPrefix + slice
 		pattern = strings.TrimPrefix(pattern, "/")
-
 		trimmed := strings.TrimSuffix(pattern, "/")
 		isDirPattern := strings.HasSuffix(pattern, "/")
 
 		trimmed = strings.ReplaceAll(trimmed, "**", "*")
 
-		matched := false
+		var matched bool
 		var err error
-
 		if strings.Contains(trimmed, "/") {
 			matched, err = filepath.Match(trimmed, relPath)
 		} else {
@@ -235,8 +276,7 @@ func isIgnored(relPath string, patterns []string) bool {
 		}
 
 		if isDirPattern {
-			dir := trimmed
-			if relPath == dir || strings.HasPrefix(relPath, dir+"/") {
+			if relPath == trimmed || strings.HasPrefix(relPath, trimmed+"/") {
 				return true
 			}
 		}
