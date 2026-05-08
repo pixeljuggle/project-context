@@ -1,6 +1,6 @@
 # Project Context
 
-**Estimated tokens:** ~6957
+**Estimated tokens:** ~7078
 
 ## Directory Tree
 
@@ -185,17 +185,17 @@ release:
   draft: false
   prerelease: auto
 
-brews:
+# Modern Homebrew Cask configuration (no deprecation warning)
+homebrew_casks:
   - repository:
       owner: pixeljuggle
       name: homebrew-project-context
+    name: project-context
     homepage: https://github.com/pixeljuggle/project-context
-    description: A fast, zero-dependency tool that generates a perfect project-context.md for LLMs, code reviews, or documentation.
+    description: Zero-dependency CLI that generates a perfect project-context.md for LLMs, code reviews, or documentation.
     license: MIT
-    install: |
-      bin.install "project-context"
-    test: |
-      system "#{bin}/project-context --version"
+    binaries:
+      - project-context
 ```
 
 ### LICENSE
@@ -307,11 +307,28 @@ test-build:
 ### README.md
 
 ````md
-# Project Context
+# project-context
 
-A zero-dependency command-line tool that generates a `project-context.md` file containing a recursive directory tree and the contents of relevant source files. The output is suitable for LLMs, code reviews, or documentation.
+**Zero-dependency CLI that generates a perfect `project-context.md` for LLMs, code reviews, or documentation.**
 
-The tool supports full `.gitignore` rules (including negation with `!`), hard-coded ignores for common directories, per-file content rules, file-size limits, truncation, and extension filtering.
+It recursively builds a clean Git-style directory tree and includes the contents of relevant source files — with safe Markdown handling, full `.gitignore` support (including `!` negation), binary skipping, size limits, truncation, and extension filtering.
+
+See a real example output: [`docs/project-context.md`](docs/project-context.md)
+
+---
+
+## Features
+
+- Git-style recursive directory tree (alphabetically sorted)
+- File contents in syntax-highlighted code blocks
+- Safe Markdown output (uses 4-backtick fences for `.md` files)
+- Full `.gitignore` support including negation (`!`)
+- Hard-coded ignores for common junk directories
+- Per-file/folder content rules via `project-context.json`
+- `--max-size`, `--truncate`, `--ext`, and `--verbose` flags
+- Accurate token estimation
+- `--stdout` mode for instant clipboard use
+- Zero external dependencies (pure Go)
 
 ---
 
@@ -320,46 +337,51 @@ The tool supports full `.gitignore` rules (including negation with `!`), hard-co
 ### For end users
 
 ```bash
-# Homebrew
-brew install pixeljuggle/project-context/project-context
+# Homebrew (recommended)
+brew tap pixeljuggle/project-context
+brew install project-context
+```
 
-# Go
+### With Go
+
+```bash
 go install github.com/pixeljuggle/project-context/cmd/project-context@latest
 ```
 
-Binaries for Linux, macOS, and Windows are available on the [Releases page](https://github.com/pixeljuggle/project-context/releases).
+### Download binaries
+
+Pre-built binaries for Linux, macOS, and Windows (amd64 + arm64) are available on the [Releases page](https://github.com/pixeljuggle/project-context/releases).
 
 ---
 
 ## Usage
 
-Run the tool in the root of any project:
+Run in the root of any project:
 
 ```bash
 project-context
 ```
 
-### Common workflows for fullstack TypeScript / Next.js projects
+### Common workflows
 
 ```bash
-# Generate and copy to clipboard (most common)
+# Most common — generate and copy straight to clipboard
 project-context --stdout | pbcopy
 
-# Limit size and truncate large files
-project-context --max-size 750 --truncate 150 --stdout | pbcopy
+# TypeScript / Next.js project (recommended defaults)
+project-context --max-size 750 --truncate 150 --ext .ts,.tsx,.js,.jsx,.json,.md --stdout | pbcopy
 
-# Include only source files
-project-context --ext .ts,.tsx,.js,.jsx,.json,.md --stdout | pbcopy
-
-# Additional ignores
-project-context -I "*.test.*" -I "*.spec.*" -I "coverage/" --stdout | pbcopy
+# Skip tests and stories
+project-context -I "*.test.*" -I "*.spec.*" -I "*.stories.*" --stdout | pbcopy
 ```
+
+See the full generated example: [`docs/project-context.md`](docs/project-context.md)
 
 ---
 
 ## Configuration
 
-Create `project-context.json` in the project root to set defaults:
+Create `project-context.json` in your project root to set project-specific defaults:
 
 ```json
 {
@@ -373,30 +395,25 @@ Create `project-context.json` in the project root to set defaults:
 }
 ```
 
-- `ignores`: Additional `.gitignore`-style patterns (applied after `.gitignore`)
-- `rules`: Per-path rules (`content: false` shows the file in the tree but skips its content)
-- `maxSizeKB`: Default maximum file size in KB (0 = unlimited)
-- `truncateLines`: Default number of lines to keep for large files (0 = skip)
-
-Command-line flags override config values.
+Command-line flags always override config values.
 
 ---
 
 ## Command-Line Flags
 
-| Flag              | Default                | Description |
-|-------------------|------------------------|-----------|
-| `--stdout`        | false                  | Print output to stdout instead of writing a file |
-| `--max-size`      | 1024                   | Maximum file size in KB (0 = unlimited) |
-| `--truncate`      | 0                      | Truncate large files to this many lines (0 = skip) |
-| `--verbose`       | false                  | Print skipped or truncated files to stderr |
-| `--ext`           | (repeatable)           | Include only files with these extensions |
-| `--root`          | `.`                    | Project root directory |
-| `--config`        | `project-context.json` | Path to config file |
-| `--output`        | `project-context.md`   | Output filename |
-| `--no-gitignore`  | false                  | Do not load `.gitignore` |
-| `-I`              | (repeatable)           | Additional ignore pattern (supports `!` negation) |
-| `--version`       | —                      | Print version and exit |
+| Flag             | Default                | Description                                        |
+| ---------------- | ---------------------- | -------------------------------------------------- |
+| `--stdout`       | false                  | Print to stdout instead of writing a file          |
+| `--max-size`     | 1024                   | Maximum file size in KB (0 = unlimited)            |
+| `--truncate`     | 0                      | Truncate large files to this many lines (0 = skip) |
+| `--verbose`      | false                  | Print skipped/truncated files to stderr            |
+| `--ext`          | (repeatable)           | Only include files with these extensions           |
+| `--root`         | `.`                    | Project root directory                             |
+| `--config`       | `project-context.json` | Path to config file                                |
+| `--output`       | `project-context.md`   | Output filename                                    |
+| `--no-gitignore` | false                  | Do not load `.gitignore`                           |
+| `-I`             | (repeatable)           | Additional ignore pattern (supports `!` negation)  |
+| `--version`      | —                      | Print version and exit                             |
 
 ---
 
@@ -409,44 +426,38 @@ git clone https://github.com/pixeljuggle/project-context.git
 cd project-context
 
 make build          # builds to ./bin/project-context
-make install        # installs to $GOPATH/bin
-make run            # runs against the project itself
-go run ./cmd/project-context --stdout
+make install        # installs globally
+make run            # quick test run
 ```
 
 ### Makefile targets
 
-| Command                | Purpose |
-|------------------------|---------|
-| `make build`           | Build for current platform |
-| `make all`             | Build all supported platforms |
+| Command                | Purpose                         |
+| ---------------------- | ------------------------------- |
+| `make build`           | Build for current platform      |
+| `make all`             | Build all supported platforms   |
 | `make lint`            | Run gofmt, vet, and staticcheck |
-| `make test`            | Run tests |
-| `make release`         | Local snapshot release |
-| `make release-dry-run` | Validate release configuration |
-| `make clean`           | Remove build artifacts |
-
-Tests are in `internal/generator/generator_test.go`.
-
-### Releasing
-
-```bash
-git tag v1.2.0
-git push origin v1.2.0
-```
-
-GitHub Actions and GoReleaser handle cross-compilation, archives, checksums, and Homebrew tap publication.
+| `make test`            | Run tests                       |
+| `make release`         | Local snapshot release          |
+| `make release-dry-run` | Validate release configuration  |
+| `make clean`           | Remove build artifacts          |
 
 ---
 
 ## Contributing
 
+Contributions are welcome. Please:
+
 1. Fork and clone the repository.
-2. Make changes.
-3. Run `make lint && go test ./...`.
+2. Make your changes.
+3. Run `make lint && make test`.
 4. Submit a pull request.
 
 ---
+
+## License
+
+MIT
 
 [Releases](https://github.com/pixeljuggle/project-context/releases) • [Issues](https://github.com/pixeljuggle/project-context/issues)
 ````
