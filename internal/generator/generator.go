@@ -58,20 +58,22 @@ func isIgnored(relPath string, patterns []string) bool {
 
 	relPath = filepath.ToSlash(relPath)
 
-	// Hard-coded ignores (still always applied first)
+	// Hard-coded ignores are applied first (they cannot be easily negated)
 	hardCoded := []string{
 		".git", "node_modules", "dist", "build", "target",
 		"venv", ".venv", ".next", "__pycache__", "coverage",
 	}
+	ignored := false
 	for _, d := range hardCoded {
 		if after := strings.TrimPrefix(relPath, d); after != relPath {
 			if after == "" || strings.HasPrefix(after, "/") {
-				return true
+				ignored = true
+				break
 			}
 		}
 	}
 
-	// Process all patterns in order - last match wins
+	// Process all patterns in order — last matching rule wins
 	for _, pattern := range patterns {
 		pattern = strings.TrimSpace(pattern)
 		if pattern == "" || strings.HasPrefix(pattern, "#") {
@@ -85,12 +87,13 @@ func isIgnored(relPath string, patterns []string) bool {
 
 		if matchesPattern(pattern, relPath) {
 			if isNegation {
-				return false // explicitly include
+				ignored = false
+			} else {
+				ignored = true
 			}
-			return true // explicitly ignore
 		}
 	}
-	return false
+	return ignored
 }
 
 func getContentRule(relPath string, rules map[string]Rule) bool {

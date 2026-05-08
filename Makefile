@@ -1,6 +1,6 @@
 GOBIN := $(shell go env GOPATH)/bin
 
-.PHONY: all build clean install run linux darwin windows release release-dry-run lint
+.PHONY: all build clean install run test linux darwin windows release release-dry-run lint
 
 BINARY_NAME := project-context
 VERSION     ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
@@ -17,6 +17,9 @@ install:
 # Run directly
 run:
 	go run ./cmd/project-context -I "docs/project-context.md" -output "docs/project-context.md" 
+
+test:
+	go test ./... -race -count=1 -v
 
 # Build for all platforms → bin/
 all: linux darwin windows
