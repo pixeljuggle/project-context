@@ -15,7 +15,7 @@ See a real example output: [`docs/project-context.md`](docs/project-context.md)
 - Safe Markdown output (uses 4-backtick fences for `.md` files)
 - Full `.gitignore` support including negation (`!`)
 - Hard-coded ignores for common junk directories
-- Per-file/folder content rules via `project-context.json`
+- Per-file/folder content rules via `project-context.json` (supports `*` wildcard and `**/` recursive matching)
 - `--max-size`, `--truncate`, `--ext`, and `--verbose` flags
 - Accurate token estimation
 - `--stdout` mode for instant clipboard use
@@ -31,12 +31,14 @@ See a real example output: [`docs/project-context.md`](docs/project-context.md)
 # Homebrew (recommended)
 brew tap pixeljuggle/project-context
 brew install project-context
+
 ```
 
 ### With Go
 
 ```bash
-go install github.com/pixeljuggle/project-context/cmd/project-context@latest
+go install https://github.com/pixeljuggle/project-context/cmd/project-context@latest
+
 ```
 
 ### Download binaries
@@ -51,6 +53,7 @@ Run in the root of any project:
 
 ```bash
 project-context
+
 ```
 
 ### Common workflows
@@ -64,9 +67,10 @@ project-context --max-size 750 --truncate 150 --ext .ts,.tsx,.js,.jsx,.json,.md 
 
 # Skip tests and stories
 project-context -I "*.test.*" -I "*.spec.*" -I "*.stories.*" --stdout | pbcopy
+
 ```
 
-See the full generated example: [`docs/project-context.md`](docs/project-context.md)
+See the full generated example: [`docs/project-context.md`](https://www.google.com/search?q=docs/project-context.md)
 
 ---
 
@@ -79,12 +83,21 @@ Create `project-context.json` in your project root to set project-specific defau
   "ignores": ["*.log", "*.tmp", "coverage/"],
   "rules": {
     "public/": { "content": false },
-    "src/assets/": { "content": false }
+    "src/assets/": { "content": false },
+    "*": { "content": false },
+    "**/package.json": { "content": true },
+    "**/tsconfig.json": { "content": true }
   },
   "maxSizeKB": 500,
   "truncateLines": 150
 }
 ```
+
+### Rule Matching
+
+- **Exact Path / Directory:** Standard paths (e.g., `public/` or `src/main.go`) match exactly from the root directory.
+- **Wildcard Fallback (`*`):** Acts as a catch-all for any file not explicitly defined. Setting `"*": { "content": false }` outputs the full directory tree but skips all file contents by default.
+- **Recursive Match (`/`):** Use the `/` prefix (e.g., `/package.json`) to apply a rule to a specific filename anywhere in your project tree.
 
 Command-line flags always override config values.
 
@@ -113,12 +126,13 @@ Command-line flags always override config values.
 ### For Go developers
 
 ```bash
-git clone https://github.com/pixeljuggle/project-context.git
+git clone [https://github.com/pixeljuggle/project-context.git](https://github.com/pixeljuggle/project-context.git)
 cd project-context
 
 make build          # builds to ./bin/project-context
 make install        # installs globally
 make run            # quick test run
+
 ```
 
 ### Makefile targets

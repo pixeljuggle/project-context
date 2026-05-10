@@ -98,12 +98,35 @@ func isIgnored(relPath string, patterns []string) bool {
 
 func getContentRule(relPath string, rules map[string]Rule) bool {
 	relPath = filepath.ToSlash(relPath)
+	baseName := filepath.Base(relPath)
+
+	// 1. Process specific rules first (ignoring the wildcard)
 	for p, rule := range rules {
+		if p == "*" {
+			continue
+		}
 		p = filepath.ToSlash(strings.TrimSuffix(p, "/"))
+
+		// Opt-in recursive check (e.g., "**/package.json")
+		if strings.HasPrefix(p, "**/") {
+			targetName := strings.TrimPrefix(p, "**/")
+			if baseName == targetName {
+				return rule.Content
+			}
+			continue
+		}
+
+		// Default strict check: exact relative path or directory prefix
 		if relPath == p || strings.HasPrefix(relPath, p+"/") {
 			return rule.Content
 		}
 	}
+
+	// 2. Fallback to wildcard if defined
+	if rule, exists := rules["*"]; exists {
+		return rule.Content
+	}
+
 	return true
 }
 
