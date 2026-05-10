@@ -1,6 +1,6 @@
 # Project Context
 
-**Estimated tokens:** ~7078
+**Estimated tokens:** ~7081
 
 ## Directory Tree
 
@@ -91,7 +91,7 @@ jobs:
           version: latest
           args: release --clean
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
 ```
 
 ### .gitignore
