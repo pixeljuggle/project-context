@@ -51,13 +51,17 @@ release:
   draft: false
   prerelease: auto
 
-# Modern Homebrew Cask configuration (no deprecation warning)
-homebrew_casks:
+brews:
   - repository:
       owner: pixeljuggle
       name: homebrew-project-context
-    directory: Formula
+    name: project-context
     homepage: https://github.com/pixeljuggle/project-context
     description: Zero-dependency CLI that generates a perfect project-context.md for LLMs, code reviews, or documentation.
     license: MIT
-    binaries: [project-context]
+    install: |
+      bin.install "project-context"
+    test: |
+      system "#{bin}/project-context --version"
+    # Optional: explicitly put it in Formula/ directory
+    directory: Formula
