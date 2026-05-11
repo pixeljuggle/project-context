@@ -7,12 +7,38 @@ const zlib = require("node:zlib");
 const tar = require("tar");
 const { pipeline } = require("node:stream/promises");
 
-const pkg = require("./package.json");
-const version = pkg.version;
 const binaryName = "project-context";
 const repo = "pixeljuggle/project-context";
 
+async function getLatestVersion() {
+  return new Promise((resolve, reject) => {
+    const options = {
+      headers: { "User-Agent": "project-context-npm-install" },
+    };
+    https
+      .get(
+        "https://api.github.com/repos/pixeljuggle/project-context/releases/latest",
+        options,
+        (res) => {
+          let data = "";
+          res.on("data", (chunk) => (data += chunk));
+          res.on("end", () => {
+            try {
+              const release = JSON.parse(data);
+              const version = release.tag_name.replace(/^v/, "");
+              resolve(version);
+            } catch (_e) {
+              reject(new Error("Failed to parse latest release from GitHub"));
+            }
+          });
+        },
+      )
+      .on("error", reject);
+  });
+}
+
 async function main() {
+  const version = await getLatestVersion();
   const platform = process.platform;
   const arch = process.arch;
 
@@ -20,8 +46,7 @@ async function main() {
   let goArch = arch === "x64" ? "amd64" : arch;
   if (goArch === "arm") goArch = "arm64";
 
-  // ← THIS WAS THE BUG: now matches your actual release filenames (hyphen)
-  const archiveName = `${binaryName}_${version}_${goOs}-${goArch}.tar.gz`;
+  const archiveName = `${binaryName}_${version}_${goOs}_${goArch}.tar.gz`;
   const url = `https://github.com/${repo}/releases/download/v${version}/${archiveName}`;
 
   const binDir = path.join(__dirname, "bin");
@@ -30,7 +55,7 @@ async function main() {
   const targetBinary = platform === "win32" ? `${binaryName}.exe` : binaryName;
   const targetPath = path.join(binDir, targetBinary);
 
-  console.log(`📥 Downloading ${binaryName} ${version} for ${goOs}-${goArch}...`);
+  console.log(`Downloading ${binaryName} ${version} for ${goOs}_${goArch}...`);
 
   const response = await new Promise((resolve, reject) => {
     https
