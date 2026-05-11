@@ -1,6 +1,6 @@
 # Project Context
 
-**Estimated tokens:** ~8512
+**Estimated tokens:** ~8631
 
 ## Directory Tree
 
@@ -351,6 +351,20 @@ See a real example output: [`docs/project-context.md`](docs/project-context.md)
 ## Installation
 
 ### For end users
+
+### npm / Bun (recommended for team projects & monorepos)
+
+Add it as a dev dependency so every contributor automatically gets the CLI when they run `bun install` (or `npm install`):
+
+```bash
+bun add -d @pixeljuggle/project-context
+# or
+npm install --save-dev @pixeljuggle/project-context
+```
+
+The `project-context` command becomes available immediately in any `package.json` script and in `./node_modules/.bin/`.
+
+### Homebrew (recommended for individual use on macOS/Linux)
 
 ```bash
 # Homebrew (recommended)
