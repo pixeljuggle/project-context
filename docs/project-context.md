@@ -1,6 +1,6 @@
 # Project Context
 
-**Estimated tokens:** ~8631
+**Estimated tokens:** ~8614
 
 ## Directory Tree
 
@@ -1176,7 +1176,8 @@ async function main() {
   let goArch = arch === "x64" ? "amd64" : arch;
   if (goArch === "arm") goArch = "arm64";
 
-  const archiveName = `${binaryName}_${version}_${goOs}_${goArch}.tar.gz`;
+  // ← THIS WAS THE BUG: now matches your actual release filenames (hyphen)
+  const archiveName = `${binaryName}_${version}_${goOs}-${goArch}.tar.gz`;
   const url = `https://github.com/${repo}/releases/download/v${version}/${archiveName}`;
 
   const binDir = path.join(__dirname, "bin");
@@ -1185,9 +1186,8 @@ async function main() {
   const targetBinary = platform === "win32" ? `${binaryName}.exe` : binaryName;
   const targetPath = path.join(binDir, targetBinary);
 
-  console.log(`Downloading ${binaryName} ${version} for ${goOs}-${goArch}...`);
+  console.log(`📥 Downloading ${binaryName} ${version} for ${goOs}-${goArch}...`);
 
-  // Download with redirect support
   const response = await new Promise((resolve, reject) => {
     https
       .get(url, (res) => {
@@ -1224,9 +1224,6 @@ main()
   .then(() => process.exit(0))
   .catch((err) => {
     console.error("❌ Failed to install project-context:", err.message);
-    console.error(
-      `   → Make sure you have released v${version} on GitHub with the .tar.gz files`,
-    );
     process.exit(1);
   });
 ```
@@ -1236,7 +1233,7 @@ main()
 ```json
 {
   "name": "@pixeljuggle/project-context",
-  "version": "0.0.12",
+  "version": "0.0.13",
   "description": "Zero-dependency CLI that generates a perfect project-context.md for LLMs, code reviews, or documentation.",
   "repository": {
     "type": "git",
