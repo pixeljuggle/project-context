@@ -1,6 +1,6 @@
 {
   "name": "@pixeljuggle/project-context",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Zero-dependency CLI that generates a perfect project-context.md for LLMs, code reviews, or documentation.",
   "repository": {
     "type": "git",
