@@ -16,7 +16,7 @@ install:
 
 # Run directly
 run:
-	go run ./cmd/project-context -I "docs/project-context.md" -output "docs/project-context.md" 
+	go run ./cmd/project-context --config ./project-context.json
 
 test:
 	go test ./... -race -count=1 -v
