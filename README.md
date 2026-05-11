@@ -29,7 +29,7 @@ See a real example output: [`docs/project-context.md`](docs/project-context.md)
 
 ```bash
 # Homebrew (recommended)
-brew tap pixeljuggle/project-context
+brew tap pixeljuggle/homebrew-project-context
 brew install project-context
 ```
 

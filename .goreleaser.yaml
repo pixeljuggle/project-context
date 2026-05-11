@@ -56,9 +56,8 @@ homebrew_casks:
   - repository:
       owner: pixeljuggle
       name: homebrew-project-context
-    name: project-context
+    directory: Formula
     homepage: https://github.com/pixeljuggle/project-context
     description: Zero-dependency CLI that generates a perfect project-context.md for LLMs, code reviews, or documentation.
     license: MIT
-    binaries:
-      - project-context
+    binaries: [project-context]
