@@ -46,7 +46,8 @@ func main() {
   "ignores": ["*.log", "coverage/"],
   "rules": {"docs/": {"content": false}},
   "maxSizeKB": 500,
-  "truncateLines": 200
+  "truncateLines": 200,
+  "output": "project-context.md"
 }`)
 		fmt.Fprintf(os.Stderr, "\n")
 	}
@@ -87,6 +88,11 @@ func main() {
 	if effectiveTruncate == 0 && config.TruncateLines != 0 {
 		effectiveTruncate = config.TruncateLines
 	}
+	// Effective output (CLI flag always wins)
+	effectiveOutput := *outputFile
+	if effectiveOutput == "project-context.md" && config.Output != "" {
+		effectiveOutput = config.Output
+	}
 
 	maxSizeBytes := int64(0)
 	if effectiveMaxSizeKB > 0 {
@@ -125,7 +131,7 @@ func main() {
 		return
 	}
 
-	outPath := *outputFile
+	outPath := effectiveOutput
 	if !filepath.IsAbs(outPath) {
 		outPath = filepath.Join(root, outPath)
 	}

@@ -91,7 +91,8 @@ Create `project-context.json` in your project root to set project-specific defau
     "src/assets/": { "content": false }
   },
   "maxSizeKB": 500,
-  "truncateLines": 150
+  "truncateLines": 150,
+  "output": "docs/project-context.md" // relative path; CLI --output always wins
 }
 ```
 

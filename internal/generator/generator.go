@@ -18,6 +18,7 @@ type Config struct {
 	Rules         map[string]Rule `json:"rules,omitempty"`
 	MaxSizeKB     int             `json:"maxSizeKB,omitempty"`
 	TruncateLines int             `json:"truncateLines,omitempty"`
+	Output        string          `json:"output,omitempty"`
 }
 
 // matchesPattern extracts the core matching logic (used by ignore + negation)

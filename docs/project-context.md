@@ -1,6 +1,6 @@
 # Project Context
 
-**Estimated tokens:** ~7413
+**Estimated tokens:** ~7558
 
 ## Directory Tree
 
@@ -19,11 +19,14 @@ project-context-cli/
 │   └── project-context/
 │       └── main.go
 ├── docs/
+│   ├── project-context.md
+│   └── roadmap.md
 ├── go.mod
-└── internal/
-    └── generator/
-        ├── generator.go
-        └── generator_test.go
+├── internal/
+│   └── generator/
+│       ├── generator.go
+│       └── generator_test.go
+└── project-context.json
 ```
 
 ## File Contents
@@ -248,7 +251,7 @@ install:
 
 # Run directly
 run:
-	go run ./cmd/project-context -I "docs/project-context.md" -output "docs/project-context.md" 
+	go run ./cmd/project-context --config ./project-context.json
 
 test:
 	go test ./... -race -count=1 -v
@@ -403,7 +406,8 @@ Create `project-context.json` in your project root to set project-specific defau
     "src/assets/": { "content": false }
   },
   "maxSizeKB": 500,
-  "truncateLines": 150
+  "truncateLines": 150,
+  "output": "docs/project-context.md" // relative path; CLI --output always wins
 }
 ```
 
@@ -546,7 +550,8 @@ func main() {
   "ignores": ["*.log", "coverage/"],
   "rules": {"docs/": {"content": false}},
   "maxSizeKB": 500,
-  "truncateLines": 200
+  "truncateLines": 200,
+  "output": "project-context.md"
 }`)
 		fmt.Fprintf(os.Stderr, "\n")
 	}
@@ -587,6 +592,11 @@ func main() {
 	if effectiveTruncate == 0 && config.TruncateLines != 0 {
 		effectiveTruncate = config.TruncateLines
 	}
+	// Effective output (CLI flag always wins)
+	effectiveOutput := *outputFile
+	if effectiveOutput == "project-context.md" && config.Output != "" {
+		effectiveOutput = config.Output
+	}
 
 	maxSizeBytes := int64(0)
 	if effectiveMaxSizeKB > 0 {
@@ -625,7 +635,7 @@ func main() {
 		return
 	}
 
-	outPath := *outputFile
+	outPath := effectiveOutput
 	if !filepath.IsAbs(outPath) {
 		outPath = filepath.Join(root, outPath)
 	}
@@ -671,6 +681,7 @@ type Config struct {
 	Rules         map[string]Rule `json:"rules,omitempty"`
 	MaxSizeKB     int             `json:"maxSizeKB,omitempty"`
 	TruncateLines int             `json:"truncateLines,omitempty"`
+	Output        string          `json:"output,omitempty"`
 }
 
 // matchesPattern extracts the core matching logic (used by ignore + negation)
@@ -1088,6 +1099,18 @@ func contains(slice []string, s string) bool {
 		}
 	}
 	return false
+}
+```
+
+### project-context.json
+
+```json
+{
+  "rules": {
+    "docs/project-context.md": { "content": false },
+    "docs/roadmap.md": { "content": false }
+  },
+  "output": "docs/project-context.md"
 }
 ```
 
