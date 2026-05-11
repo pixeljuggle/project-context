@@ -1,5 +1,8 @@
 # project-context
 
+> **Under heavy development** — Configuration, flags, and output format will likely change significantly in the coming weeks.  
+> Feedback, issues, and suggestions are very welcome!
+
 **Zero-dependency CLI that generates a perfect `project-context.md` for LLMs, code reviews, or documentation.**
 
 It recursively builds a clean Git-style directory tree and includes the contents of relevant source files — with safe Markdown handling, full `.gitignore` support (including `!` negation), binary skipping, size limits, truncation, and extension filtering.
