@@ -1,6 +1,6 @@
 # Project Context
 
-**Estimated tokens:** ~7558
+**Estimated tokens:** ~8512
 
 ## Directory Tree
 
@@ -26,6 +26,12 @@ project-context-cli/
 │   └── generator/
 │       ├── generator.go
 │       └── generator_test.go
+├── npm/
+│   ├── bin/
+│   │   └── project-context.js
+│   ├── install.js
+│   ├── package-lock.json
+│   └── package.json
 └── project-context.json
 ```
 
@@ -111,6 +117,9 @@ jobs:
 # Build output
 bin/
 dist/
+!npm/bin/
+npm/bin/*
+!npm/bin/project-context.js
 
 # Test coverage
 *.out
@@ -119,6 +128,7 @@ dist/
 
 # Dependency directories (if you ever vendor)
 vendor/
+node_modules/
 
 # IDE / Editor
 .idea/
@@ -159,9 +169,6 @@ builds:
 archives:
   - formats: ["tar.gz"]
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}"
-    format_overrides:
-      - goos: windows
-        formats: ["zip"]
     files:
       - LICENSE*
       - README.md
@@ -314,6 +321,9 @@ test-build:
 
 ````md
 # project-context
+
+> **Under heavy development** — Configuration, flags, and output format will likely change significantly in the coming weeks.  
+> Feedback, issues, and suggestions are very welcome!
 
 **Zero-dependency CLI that generates a perfect `project-context.md` for LLMs, code reviews, or documentation.**
 
@@ -1102,13 +1112,151 @@ func contains(slice []string, s string) bool {
 }
 ```
 
+### npm/bin/project-context.js
+
+```js
+#!/usr/bin/env node
+const { spawnSync } = require("node:child_process");
+const path = require("node:path");
+const fs = require("node:fs");
+
+const binDir = path.join(__dirname);
+const isWin = process.platform === "win32";
+const binary = path.join(binDir, isWin ? "project-context.exe" : "project-context");
+
+if (!fs.existsSync(binary)) {
+  console.error("❌ project-context binary not found. Run `npm install` again.");
+  process.exit(1);
+}
+
+const result = spawnSync(binary, process.argv.slice(2), {
+  stdio: "inherit",
+  env: { ...process.env },
+});
+
+process.exit(result.status ?? 0);
+```
+
+### npm/install.js
+
+```js
+#!/usr/bin/env node
+
+const https = require("node:https");
+const fs = require("node:fs");
+const path = require("node:path");
+const zlib = require("node:zlib");
+const tar = require("tar");
+const { pipeline } = require("node:stream/promises");
+
+const pkg = require("./package.json");
+const version = pkg.version;
+const binaryName = "project-context";
+const repo = "pixeljuggle/project-context";
+
+async function main() {
+  const platform = process.platform;
+  const arch = process.arch;
+
+  const goOs = platform === "win32" ? "windows" : platform;
+  let goArch = arch === "x64" ? "amd64" : arch;
+  if (goArch === "arm") goArch = "arm64";
+
+  const archiveName = `${binaryName}_${version}_${goOs}_${goArch}.tar.gz`;
+  const url = `https://github.com/${repo}/releases/download/v${version}/${archiveName}`;
+
+  const binDir = path.join(__dirname, "bin");
+  fs.mkdirSync(binDir, { recursive: true });
+
+  const targetBinary = platform === "win32" ? `${binaryName}.exe` : binaryName;
+  const targetPath = path.join(binDir, targetBinary);
+
+  console.log(`Downloading ${binaryName} ${version} for ${goOs}-${goArch}...`);
+
+  // Download with redirect support
+  const response = await new Promise((resolve, reject) => {
+    https
+      .get(url, (res) => {
+        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          return https.get(res.headers.location, resolve).on("error", reject);
+        }
+        resolve(res);
+      })
+      .on("error", reject);
+  });
+
+  if (response.statusCode !== 200) {
+    throw new Error(`Download failed with status ${response.statusCode}\nURL: ${url}`);
+  }
+
+  await pipeline(
+    response,
+    zlib.createGunzip(),
+    tar.extract({
+      cwd: binDir,
+      filter: (header) => path.basename(header) === targetBinary,
+      strip: 0,
+    }),
+  );
+
+  if (platform !== "win32") {
+    fs.chmodSync(targetPath, "755");
+  }
+
+  console.log(`${binaryName} ${version} installed successfully!`);
+}
+
+main()
+  .then(() => process.exit(0))
+  .catch((err) => {
+    console.error("❌ Failed to install project-context:", err.message);
+    console.error(
+      `   → Make sure you have released v${version} on GitHub with the .tar.gz files`,
+    );
+    process.exit(1);
+  });
+```
+
+### npm/package.json
+
+```json
+{
+  "name": "@pixeljuggle/project-context",
+  "version": "0.0.12",
+  "description": "Zero-dependency CLI that generates a perfect project-context.md for LLMs, code reviews, or documentation.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pixeljuggle/project-context.git"
+  },
+  "license": "MIT",
+  "author": "alex",
+  "bin": {
+    "project-context": "bin/project-context.js"
+  },
+  "scripts": {
+    "postinstall": "node install.js"
+  },
+  "dependencies": {
+    "tar": "^7.5.15"
+  },
+  "files": [
+    "install.js",
+    "bin/project-context.js"
+  ],
+  "engines": {
+    "node": ">=18"
+  }
+}
+```
+
 ### project-context.json
 
 ```json
 {
   "rules": {
     "docs/project-context.md": { "content": false },
-    "docs/roadmap.md": { "content": false }
+    "docs/roadmap.md": { "content": false },
+    "npm/package-lock.json": { "content": false }
   },
   "output": "docs/project-context.md"
 }

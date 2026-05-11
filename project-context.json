@@ -1,7 +1,8 @@
 {
   "rules": {
     "docs/project-context.md": { "content": false },
-    "docs/roadmap.md": { "content": false }
+    "docs/roadmap.md": { "content": false },
+    "npm/package-lock.json": { "content": false }
   },
   "output": "docs/project-context.md"
 }

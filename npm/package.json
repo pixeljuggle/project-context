@@ -1,0 +1,27 @@
+{
+  "name": "@pixeljuggle/project-context",
+  "version": "0.0.12",
+  "description": "Zero-dependency CLI that generates a perfect project-context.md for LLMs, code reviews, or documentation.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pixeljuggle/project-context.git"
+  },
+  "license": "MIT",
+  "author": "alex",
+  "bin": {
+    "project-context": "bin/project-context.js"
+  },
+  "scripts": {
+    "postinstall": "node install.js"
+  },
+  "dependencies": {
+    "tar": "^7.5.15"
+  },
+  "files": [
+    "install.js",
+    "bin/project-context.js"
+  ],
+  "engines": {
+    "node": ">=18"
+  }
+}

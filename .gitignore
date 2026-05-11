@@ -9,6 +9,9 @@
 # Build output
 bin/
 dist/
+!npm/bin/
+npm/bin/*
+!npm/bin/project-context.js
 
 # Test coverage
 *.out
@@ -17,6 +20,7 @@ dist/
 
 # Dependency directories (if you ever vendor)
 vendor/
+node_modules/
 
 # IDE / Editor
 .idea/
