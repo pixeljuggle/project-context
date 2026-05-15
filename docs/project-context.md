@@ -1,6 +1,6 @@
 # Project Context
 
-**Estimated tokens:** ~9451
+**Estimated tokens:** ~10012
 
 ## Directory Tree
 
@@ -27,6 +27,7 @@ project-context-cli/
 │       ├── generator.go
 │       └── generator_test.go
 ├── npm/
+│   ├── README.md
 │   ├── bin/
 │   │   └── project-context.js
 │   └── package.json
@@ -162,7 +163,7 @@ jobs:
           publish_platform_pkg "linux" "amd64" "linux" "x64"
           publish_platform_pkg "windows" "amd64" "win32" "x64"
 
-      # 3. Publish the main router package
+        # 3. Publish the main router package
       - name: Publish main npm package
         if: startsWith(github.ref, 'refs/tags/v')
         env:
@@ -171,26 +172,22 @@ jobs:
           VERSION=${GITHUB_REF#refs/tags/v}
           cd npm
 
-          # Update main package version
+          # Update main package version + optionalDependencies
           npm --no-git-tag-version version $VERSION
-
-          # Dynamically update optionalDependencies to match the new version
-          node -e "
-            const fs = require('fs');
-            let pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-            const ver = '$VERSION';
+          node -e '
+            const fs = require("fs");
+            let pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+            const ver = "'$VERSION'";
             pkg.optionalDependencies = {
-              '@pixeljuggle/project-context-darwin-arm64': ver,
-              '@pixeljuggle/project-context-darwin-amd64': ver,
-              '@pixeljuggle/project-context-linux-arm64': ver,
-              '@pixeljuggle/project-context-linux-amd64': ver,
-              '@pixeljuggle/project-context-windows-amd64': ver
+              "@pixeljuggle/project-context-darwin-arm64": ver,
+              "@pixeljuggle/project-context-darwin-amd64": ver,
+              "@pixeljuggle/project-context-linux-arm64": ver,
+              "@pixeljuggle/project-context-linux-amd64": ver,
+              "@pixeljuggle/project-context-windows-amd64": ver
             };
-            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
-            console.log('✅ Updated main package to version ' + ver);
-          "
+            fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2) + "\n");
+          '
 
-          # Copy documentation files into the published package
           cp ../README.md ./
           cp ../LICENSE ./
 
@@ -248,7 +245,7 @@ before:
 
 builds:
   - id: project-context
-  - env:
+    env:
       - CGO_ENABLED=0
     main: ./cmd/project-context
     goos:
@@ -385,6 +382,27 @@ release:
 release-dry-run:
 	@$(call install-tool,goreleaser,github.com/goreleaser/goreleaser/v2@latest)
 	$(GOBIN)/goreleaser check
+
+# === Version sync (single source of truth = git tag) ===
+sync-npm-version:
+	@TAG=$$(git describe --tags --match 'v*' --abbrev=0 2>/dev/null || echo "v0.0.0"); \
+	VERSION=$${TAG#v}; \
+	echo "🔄 Syncing npm/package.json to version $$VERSION..."; \
+	node -e ' \
+	  const fs = require("fs"); \
+	  let pkg = JSON.parse(fs.readFileSync("npm/package.json", "utf8")); \
+	  const ver = "'$$VERSION'"; \
+	  pkg.version = ver; \
+	  pkg.optionalDependencies = { \
+	    "@pixeljuggle/project-context-darwin-arm64": ver, \
+	    "@pixeljuggle/project-context-darwin-amd64": ver, \
+	    "@pixeljuggle/project-context-linux-arm64": ver, \
+	    "@pixeljuggle/project-context-linux-amd64": ver, \
+	    "@pixeljuggle/project-context-windows-amd64": ver \
+	  }; \
+	  fs.writeFileSync("npm/package.json", JSON.stringify(pkg, null, 2) + "\n"); \
+	  console.log("✅ npm/package.json updated to " + ver); \
+	'
 
 # === Lint target (auto-install staticcheck) ===
 lint:
@@ -568,36 +586,44 @@ make run            # quick test run
 
 ### Makefile targets
 
-| Command                | Purpose                         |
-| ---------------------- | ------------------------------- |
-| `make build`           | Build for current platform      |
-| `make all`             | Build all supported platforms   |
-| `make lint`            | Run gofmt, vet, and staticcheck |
-| `make test`            | Run tests                       |
-| `make release`         | Local snapshot release          |
-| `make release-dry-run` | Validate release configuration  |
-| `make clean`           | Remove build artifacts          |
+| Command                 | Purpose                                                                      |
+| ----------------------- | ---------------------------------------------------------------------------- |
+| `make build`            | Build for current platform                                                   |
+| `make all`              | Build all supported platforms                                                |
+| `make lint`             | Run gofmt, vet, and staticcheck                                              |
+| `make test`             | Run tests                                                                    |
+| `make release`          | Local snapshot release                                                       |
+| `make release-dry-run`  | Validate release configuration                                               |
+| `make sync-npm-version` | Update `npm/package.json` version + optionalDependencies from latest git tag |
+| `make clean`            | Remove build artifacts                                                       |
 
 ---
 
 ## Releasing
 
-To create a new release:
+The release process is fully automated and uses a **single source of truth** (the git tag).
 
 ```bash
-# 1. Validate everything
+# 1. Sync version across npm/package.json (main + all optional deps)
+make sync-npm-version
+
+# 2. Validate everything
 make release-dry-run
 
-# 2. Tag and push (this triggers the full automated release)
-git tag v0.0.X
-git push origin v0.0.X
+# 3. Tag and push (this triggers the full GitHub Actions release)
+git tag v0.2.0          # bump to your next semantic version
+git push && git push --tags
 ```
 
 GitHub Actions + GoReleaser will automatically:
 
-- Build binaries for Linux, macOS, Windows (amd64 + arm64)
+- Build native binaries for Linux, macOS, Windows (amd64 + arm64)
+- Publish the 5 tiny platform-specific optional packages to npm
+- Publish the main `@pixeljuggle/project-context` router package
 - Create a GitHub Release with changelog
 - Update the Homebrew formula in the tap
+
+**Note:** `npm/package.json` now uses version `"0.0.0"` as a template. Never edit the version manually — always run `make sync-npm-version` (or let the CI handle it on tag push).
 
 ---
 
@@ -1246,6 +1272,26 @@ func contains(slice []string, s string) bool {
 }
 ```
 
+### npm/README.md
+
+````md
+# @pixeljuggle/project-context
+
+**This is the npm distribution of [project-context](https://github.com/pixeljuggle/project-context).**
+
+Install it as a dev dependency:
+
+```bash
+npm install --save-dev @pixeljuggle/project-context
+# or
+bun add -d @pixeljuggle/project-context
+```
+
+The `project-context` binary is automatically available in `./node_modules/.bin/`.
+
+Full documentation → [GitHub README](https://github.com/pixeljuggle/project-context#readme)
+````
+
 ### npm/bin/project-context.js
 
 ```js
@@ -1303,7 +1349,7 @@ try {
 ```json
 {
   "name": "@pixeljuggle/project-context",
-  "version": "0.1.2",
+  "version": "0.1.1",
   "description": "Zero-dependency CLI that generates a perfect project-context.md for LLMs, code reviews, or documentation.",
   "repository": {
     "type": "git",

@@ -48,9 +48,9 @@ release-dry-run:
 	@$(call install-tool,goreleaser,github.com/goreleaser/goreleaser/v2@latest)
 	$(GOBIN)/goreleaser check
 
-# === Version sync (single source of truth = git tag) ===
+# === Version sync (single source of truth = highest semantic version tag) ===
 sync-npm-version:
-	@TAG=$$(git describe --tags --abbrev=0 2>/dev/null || echo "0.0.0"); \
+	@TAG=$$(git tag --sort=-version:refname --list 'v*' | head -n1 2>/dev/null || echo "v0.0.0"); \
 	VERSION=$${TAG#v}; \
 	echo "🔄 Syncing npm/package.json to version $$VERSION..."; \
 	node -e ' \
