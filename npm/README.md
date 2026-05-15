@@ -12,4 +12,20 @@ bun add -d @pixeljuggle/project-context
 
 The `project-context` binary is automatically available in `./node_modules/.bin/`.
 
+---
+
+### Trusted Dependencies (npm v10+ / pnpm / Yarn)
+
+npm now requires explicit trust for packages that ship native binaries (even with the modern optionalDependencies pattern we use).
+
+Add this to your project's `package.json` to avoid security warnings:
+
+```json
+{
+  "trustedDependencies": ["@pixeljuggle/project-context"]
+}
+```
+
+This is a **one-time** setup and recommended for all users.
+
 Full documentation → [GitHub README](https://github.com/pixeljuggle/project-context#readme)
