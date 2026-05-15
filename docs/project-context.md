@@ -1,6 +1,6 @@
 # Project Context
 
-**Estimated tokens:** ~10159
+**Estimated tokens:** ~10176
 
 ## Directory Tree
 
@@ -161,7 +161,7 @@ jobs:
             "
 
             echo "Publishing ${PKG_NAME} v${VERSION}..."
-            npm publish "$DIR" --access public
+            npm publish "./$DIR" --access public
           }
 
           # Publish all platforms
@@ -181,7 +181,7 @@ jobs:
           cd npm
 
           # Update main package version + optionalDependencies
-          npm --no-git-tag-version version $VERSION
+          npm --no-git-tag-version --allow-same-version version $VERSION
           node -e '
             const fs = require("fs");
             let pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
@@ -199,7 +199,6 @@ jobs:
           cp ../README.md ./
           cp ../LICENSE ./
 
-          npm ci --ignore-scripts
           npm publish --access public
 ```
 
@@ -390,6 +389,7 @@ release:
 release-dry-run:
 	@$(call install-tool,goreleaser,github.com/goreleaser/goreleaser/v2@latest)
 	$(GOBIN)/goreleaser check
+
 # === Bump version (recommended way to release) ===
 # Usage: make bump-version VERSION=0.1.5
 bump-version:
@@ -398,21 +398,23 @@ bump-version:
 		exit 1; \
 	fi
 	@echo "🔄 Bumping version to $(VERSION)..."
-	@node -e '
-		const fs = require("fs");
-		let pkg = JSON.parse(fs.readFileSync("npm/package.json", "utf8"));
-		const ver = "$(VERSION)";
-		pkg.version = ver;
-		pkg.optionalDependencies = {
-			"@pixeljuggle/project-context-darwin-arm64": ver,
-			"@pixeljuggle/project-context-darwin-amd64": ver,
-			"@pixeljuggle/project-context-linux-arm64": ver,
-			"@pixeljuggle/project-context-linux-amd64": ver,
-			"@pixeljuggle/project-context-windows-amd64": ver
-		};
-		fs.writeFileSync("npm/package.json", JSON.stringify(pkg, null, 2) + "\n");
-		console.log("✅ npm/package.json updated to " + ver);
-	'
+	@node -e "\
+		const fs = require('fs'); \
+		let pkg = JSON.parse(fs.readFileSync('npm/package.json', 'utf8')); \
+		const ver = '$(VERSION)'; \
+		pkg.version = ver; \
+		pkg.optionalDependencies = { \
+			'@pixeljuggle/project-context-darwin-arm64': ver, \
+			'@pixeljuggle/project-context-darwin-amd64': ver, \
+			'@pixeljuggle/project-context-linux-arm64': ver, \
+			'@pixeljuggle/project-context-linux-amd64': ver, \
+			'@pixeljuggle/project-context-windows-amd64': ver \
+		}; \
+		fs.writeFileSync('npm/package.json', JSON.stringify(pkg, null, 2) + '\n'); \
+		console.log('✅ npm/package.json updated to ' + ver); \
+	"
+	project-context
+	git add docs/project-context.md
 	git add npm/package.json
 	git commit -m "chore: bump version to v$(VERSION)"
 	git tag "v$(VERSION)"
@@ -1378,7 +1380,7 @@ try {
 ```json
 {
   "name": "@pixeljuggle/project-context",
-  "version": "0.1.4",
+  "version": "0.1.8",
   "description": "Zero-dependency CLI that generates a perfect project-context.md for LLMs, code reviews, or documentation.",
   "repository": {
     "type": "git",
@@ -1398,11 +1400,11 @@ try {
     "node": ">=18"
   },
   "optionalDependencies": {
-    "@pixeljuggle/project-context-darwin-arm64": "0.1.4",
-    "@pixeljuggle/project-context-darwin-amd64": "0.1.4",
-    "@pixeljuggle/project-context-linux-arm64": "0.1.4",
-    "@pixeljuggle/project-context-linux-amd64": "0.1.4",
-    "@pixeljuggle/project-context-windows-amd64": "0.1.4"
+    "@pixeljuggle/project-context-darwin-arm64": "0.1.8",
+    "@pixeljuggle/project-context-darwin-amd64": "0.1.8",
+    "@pixeljuggle/project-context-linux-arm64": "0.1.8",
+    "@pixeljuggle/project-context-linux-amd64": "0.1.8",
+    "@pixeljuggle/project-context-windows-amd64": "0.1.8"
   }
 }
 ```
