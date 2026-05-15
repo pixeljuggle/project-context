@@ -48,19 +48,27 @@ jobs:
             GOARCH=$2
             NODE_OS=$3
             NODE_ARCH=$4
-            
+
             PKG_NAME="@pixeljuggle/project-context-${GOOS}-${GOARCH}"
             DIR="dist/npm-${GOOS}-${GOARCH}"
             mkdir -p "$DIR"
-            
-            # Copy the binary built by GoReleaser
-            if [ "$GOOS" = "windows" ]; then
-              cp "dist/project-context_${GOOS}_${GOARCH}/project-context.exe" "$DIR/" || true
-            else
-              cp "dist/project-context_${GOOS}_${GOARCH}/project-context" "$DIR/"
+
+            # GoReleaser now uses _v1 / _v8.0 suffixes → find the correct binary
+            SRC_DIR="dist/project-context_${GOOS}_${GOARCH}"
+            if [ -d "${SRC_DIR}_v8.0" ]; then
+              SRC_DIR="${SRC_DIR}_v8.0"
+            elif [ -d "${SRC_DIR}_v1" ]; then
+              SRC_DIR="${SRC_DIR}_v1"
             fi
 
-            # Create minimal package.json using Node (avoids YAML parsing issues)
+            # Copy the binary
+            if [ "$GOOS" = "windows" ]; then
+              cp "${SRC_DIR}/project-context.exe" "$DIR/" || true
+            else
+              cp "${SRC_DIR}/project-context" "$DIR/"
+            fi
+
+            # Create minimal package.json
             node -e "
               const fs = require('fs');
               const pkg = {
@@ -79,7 +87,7 @@ jobs:
               fs.writeFileSync('${DIR}/package.json', JSON.stringify(pkg, null, 2) + '\n');
               console.log('Created ${PKG_NAME}/package.json');
             "
-            
+
             echo "Publishing ${PKG_NAME} v${VERSION}..."
             npm publish "$DIR" --access public
           }
