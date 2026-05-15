@@ -89,7 +89,7 @@ jobs:
             "
 
             echo "Publishing ${PKG_NAME} v${VERSION}..."
-            npm publish "$DIR" --access public
+            npm publish "./$DIR" --access public
           }
 
           # Publish all platforms
