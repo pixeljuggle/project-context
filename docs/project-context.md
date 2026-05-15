@@ -1,6 +1,6 @@
 # Project Context
 
-**Estimated tokens:** ~10012
+**Estimated tokens:** ~10159
 
 ## Directory Tree
 
@@ -120,19 +120,27 @@ jobs:
             GOARCH=$2
             NODE_OS=$3
             NODE_ARCH=$4
-            
+
             PKG_NAME="@pixeljuggle/project-context-${GOOS}-${GOARCH}"
             DIR="dist/npm-${GOOS}-${GOARCH}"
             mkdir -p "$DIR"
-            
-            # Copy the binary built by GoReleaser
-            if [ "$GOOS" = "windows" ]; then
-              cp "dist/project-context_${GOOS}_${GOARCH}/project-context.exe" "$DIR/" || true
-            else
-              cp "dist/project-context_${GOOS}_${GOARCH}/project-context" "$DIR/"
+
+            # GoReleaser now uses _v1 / _v8.0 suffixes → find the correct binary
+            SRC_DIR="dist/project-context_${GOOS}_${GOARCH}"
+            if [ -d "${SRC_DIR}_v8.0" ]; then
+              SRC_DIR="${SRC_DIR}_v8.0"
+            elif [ -d "${SRC_DIR}_v1" ]; then
+              SRC_DIR="${SRC_DIR}_v1"
             fi
 
-            # Create minimal package.json using Node (avoids YAML parsing issues)
+            # Copy the binary
+            if [ "$GOOS" = "windows" ]; then
+              cp "${SRC_DIR}/project-context.exe" "$DIR/" || true
+            else
+              cp "${SRC_DIR}/project-context" "$DIR/"
+            fi
+
+            # Create minimal package.json
             node -e "
               const fs = require('fs');
               const pkg = {
@@ -151,7 +159,7 @@ jobs:
               fs.writeFileSync('${DIR}/package.json', JSON.stringify(pkg, null, 2) + '\n');
               console.log('Created ${PKG_NAME}/package.json');
             "
-            
+
             echo "Publishing ${PKG_NAME} v${VERSION}..."
             npm publish "$DIR" --access public
           }
@@ -382,27 +390,39 @@ release:
 release-dry-run:
 	@$(call install-tool,goreleaser,github.com/goreleaser/goreleaser/v2@latest)
 	$(GOBIN)/goreleaser check
-
-# === Version sync (single source of truth = git tag) ===
-sync-npm-version:
-	@TAG=$$(git describe --tags --match 'v*' --abbrev=0 2>/dev/null || echo "v0.0.0"); \
-	VERSION=$${TAG#v}; \
-	echo "🔄 Syncing npm/package.json to version $$VERSION..."; \
-	node -e ' \
-	  const fs = require("fs"); \
-	  let pkg = JSON.parse(fs.readFileSync("npm/package.json", "utf8")); \
-	  const ver = "'$$VERSION'"; \
-	  pkg.version = ver; \
-	  pkg.optionalDependencies = { \
-	    "@pixeljuggle/project-context-darwin-arm64": ver, \
-	    "@pixeljuggle/project-context-darwin-amd64": ver, \
-	    "@pixeljuggle/project-context-linux-arm64": ver, \
-	    "@pixeljuggle/project-context-linux-amd64": ver, \
-	    "@pixeljuggle/project-context-windows-amd64": ver \
-	  }; \
-	  fs.writeFileSync("npm/package.json", JSON.stringify(pkg, null, 2) + "\n"); \
-	  console.log("✅ npm/package.json updated to " + ver); \
+# === Bump version (recommended way to release) ===
+# Usage: make bump-version VERSION=0.1.5
+bump-version:
+	@if [ -z "$(VERSION)" ]; then \
+		echo "❌ Usage: make bump-version VERSION=0.1.5"; \
+		exit 1; \
+	fi
+	@echo "🔄 Bumping version to $(VERSION)..."
+	@node -e '
+		const fs = require("fs");
+		let pkg = JSON.parse(fs.readFileSync("npm/package.json", "utf8"));
+		const ver = "$(VERSION)";
+		pkg.version = ver;
+		pkg.optionalDependencies = {
+			"@pixeljuggle/project-context-darwin-arm64": ver,
+			"@pixeljuggle/project-context-darwin-amd64": ver,
+			"@pixeljuggle/project-context-linux-arm64": ver,
+			"@pixeljuggle/project-context-linux-amd64": ver,
+			"@pixeljuggle/project-context-windows-amd64": ver
+		};
+		fs.writeFileSync("npm/package.json", JSON.stringify(pkg, null, 2) + "\n");
+		console.log("✅ npm/package.json updated to " + ver);
 	'
+	git add npm/package.json
+	git commit -m "chore: bump version to v$(VERSION)"
+	git tag "v$(VERSION)"
+	@echo ""
+	@echo "✅ Version bumped and tagged!"
+	@echo "Now run:"
+	@echo "   git push && git push --tags"
+
+# Legacy alias (still works)
+sync-npm-version: bump-version
 
 # === Lint target (auto-install staticcheck) ===
 lint:
@@ -604,15 +624,8 @@ make run            # quick test run
 The release process is fully automated and uses a **single source of truth** (the git tag).
 
 ```bash
-# 1. Sync version across npm/package.json (main + all optional deps)
-make sync-npm-version
-
-# 2. Validate everything
-make release-dry-run
-
-# 3. Tag and push (this triggers the full GitHub Actions release)
-git tag v0.2.0          # bump to your next semantic version
-git push && git push --tags
+# Bump version, commit, tag, and push in one go
+make bump-version VERSION=0.1.5
 ```
 
 GitHub Actions + GoReleaser will automatically:
@@ -1289,6 +1302,22 @@ bun add -d @pixeljuggle/project-context
 
 The `project-context` binary is automatically available in `./node_modules/.bin/`.
 
+---
+
+### Trusted Dependencies (npm v10+ / pnpm / Yarn)
+
+npm now requires explicit trust for packages that ship native binaries (even with the modern optionalDependencies pattern we use).
+
+Add this to your project's `package.json` to avoid security warnings:
+
+```json
+{
+  "trustedDependencies": ["@pixeljuggle/project-context"]
+}
+```
+
+This is a **one-time** setup and recommended for all users.
+
 Full documentation → [GitHub README](https://github.com/pixeljuggle/project-context#readme)
 ````
 
@@ -1349,7 +1378,7 @@ try {
 ```json
 {
   "name": "@pixeljuggle/project-context",
-  "version": "0.1.1",
+  "version": "0.1.4",
   "description": "Zero-dependency CLI that generates a perfect project-context.md for LLMs, code reviews, or documentation.",
   "repository": {
     "type": "git",
@@ -1369,11 +1398,11 @@ try {
     "node": ">=18"
   },
   "optionalDependencies": {
-    "@pixeljuggle/project-context-darwin-arm64": "0.1.1",
-    "@pixeljuggle/project-context-darwin-amd64": "0.1.1",
-    "@pixeljuggle/project-context-linux-arm64": "0.1.1",
-    "@pixeljuggle/project-context-linux-amd64": "0.1.1",
-    "@pixeljuggle/project-context-windows-amd64": "0.1.1"
+    "@pixeljuggle/project-context-darwin-arm64": "0.1.4",
+    "@pixeljuggle/project-context-darwin-amd64": "0.1.4",
+    "@pixeljuggle/project-context-linux-arm64": "0.1.4",
+    "@pixeljuggle/project-context-linux-amd64": "0.1.4",
+    "@pixeljuggle/project-context-windows-amd64": "0.1.4"
   }
 }
 ```

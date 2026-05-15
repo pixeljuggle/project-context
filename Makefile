@@ -56,33 +56,28 @@ bump-version:
 		exit 1; \
 	fi
 	@echo "🔄 Bumping version to $(VERSION)..."
-	@node -e '
-		const fs = require("fs");
-		let pkg = JSON.parse(fs.readFileSync("npm/package.json", "utf8"));
-		const ver = "$(VERSION)";
-		pkg.version = ver;
-		pkg.optionalDependencies = {
-			"@pixeljuggle/project-context-darwin-arm64": ver,
-			"@pixeljuggle/project-context-darwin-amd64": ver,
-			"@pixeljuggle/project-context-linux-arm64": ver,
-			"@pixeljuggle/project-context-linux-amd64": ver,
-			"@pixeljuggle/project-context-windows-amd64": ver
-		};
-		fs.writeFileSync("npm/package.json", JSON.stringify(pkg, null, 2) + "\n");
-		console.log("✅ npm/package.json updated to " + ver);
-	'
-	project-context
+	@node -e "\
+		const fs = require('fs'); \
+		let pkg = JSON.parse(fs.readFileSync('npm/package.json', 'utf8')); \
+		const ver = '$(VERSION)'; \
+		pkg.version = ver; \
+		pkg.optionalDependencies = { \
+			'@pixeljuggle/project-context-darwin-arm64': ver, \
+			'@pixeljuggle/project-context-darwin-amd64': ver, \
+			'@pixeljuggle/project-context-linux-arm64': ver, \
+			'@pixeljuggle/project-context-linux-amd64': ver, \
+			'@pixeljuggle/project-context-windows-amd64': ver \
+		}; \
+		fs.writeFileSync('npm/package.json', JSON.stringify(pkg, null, 2) + '\n'); \
+		console.log('✅ npm/package.json updated to ' + ver); \
+	"
 	git add npm/package.json
-	git add docs/project-context.md
 	git commit -m "chore: bump version to v$(VERSION)"
 	git tag "v$(VERSION)"
 	@echo ""
 	@echo "✅ Version bumped and tagged!"
 	@echo "Now run:"
 	@echo "   git push && git push --tags"
-
-# Legacy alias (still works)
-sync-npm-version: bump-version
 
 # Legacy alias (still works)
 sync-npm-version: bump-version
