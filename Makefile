@@ -71,6 +71,8 @@ bump-version:
 		fs.writeFileSync('npm/package.json', JSON.stringify(pkg, null, 2) + '\n'); \
 		console.log('✅ npm/package.json updated to ' + ver); \
 	"
+	project-context
+	git add docs/project-context.md
 	git add npm/package.json
 	git commit -m "chore: bump version to v$(VERSION)"
 	git tag "v$(VERSION)"
