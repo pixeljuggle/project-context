@@ -127,5 +127,4 @@ jobs:
           cp ../README.md ./
           cp ../LICENSE ./
 
-          npm ci --ignore-scripts
           npm publish --access public
