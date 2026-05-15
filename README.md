@@ -168,19 +168,8 @@ make run            # quick test run
 The release process is fully automated and uses a **single source of truth** (the git tag).
 
 ```bash
-# 1. Tag and bump to your next semantic version
-git tag v0.2.0
-
-# 1. Sync version across npm/package.json (main + all optional deps)
-make sync-npm-version
-
-# 2. Validate everything
-make release-dry-run
-
-# 2. Commi
-
-# 3. Push (this triggers the full GitHub Actions release)
-git push && git push --tags
+# Bump version, commit, tag, and push in one go
+make bump-version VERSION=0.1.5
 ```
 
 GitHub Actions + GoReleaser will automatically:

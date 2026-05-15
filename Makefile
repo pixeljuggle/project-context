@@ -48,26 +48,44 @@ release-dry-run:
 	@$(call install-tool,goreleaser,github.com/goreleaser/goreleaser/v2@latest)
 	$(GOBIN)/goreleaser check
 
-# === Version sync (single source of truth = highest semantic version tag) ===
-sync-npm-version:
-	@TAG=$$(git tag --sort=-version:refname --list 'v*' | head -n1 2>/dev/null || echo "v0.0.0"); \
-	VERSION=$${TAG#v}; \
-	echo "🔄 Syncing npm/package.json to version $$VERSION..."; \
-	node -e ' \
-	  const fs = require("fs"); \
-	  let pkg = JSON.parse(fs.readFileSync("npm/package.json", "utf8")); \
-	  const ver = "'$$VERSION'"; \
-	  pkg.version = ver; \
-	  pkg.optionalDependencies = { \
-	    "@pixeljuggle/project-context-darwin-arm64": ver, \
-	    "@pixeljuggle/project-context-darwin-amd64": ver, \
-	    "@pixeljuggle/project-context-linux-arm64": ver, \
-	    "@pixeljuggle/project-context-linux-amd64": ver, \
-	    "@pixeljuggle/project-context-windows-amd64": ver \
-	  }; \
-	  fs.writeFileSync("npm/package.json", JSON.stringify(pkg, null, 2) + "\n"); \
-	  console.log("✅ npm/package.json updated to " + ver); \
+# === Bump version (recommended way to release) ===
+# Usage: make bump-version VERSION=0.1.5
+bump-version:
+	@if [ -z "$(VERSION)" ]; then \
+		echo "❌ Usage: make bump-version VERSION=0.1.5"; \
+		exit 1; \
+	fi
+	@echo "🔄 Bumping version to $(VERSION)..."
+	@node -e '
+		const fs = require("fs");
+		let pkg = JSON.parse(fs.readFileSync("npm/package.json", "utf8"));
+		const ver = "$(VERSION)";
+		pkg.version = ver;
+		pkg.optionalDependencies = {
+			"@pixeljuggle/project-context-darwin-arm64": ver,
+			"@pixeljuggle/project-context-darwin-amd64": ver,
+			"@pixeljuggle/project-context-linux-arm64": ver,
+			"@pixeljuggle/project-context-linux-amd64": ver,
+			"@pixeljuggle/project-context-windows-amd64": ver
+		};
+		fs.writeFileSync("npm/package.json", JSON.stringify(pkg, null, 2) + "\n");
+		console.log("✅ npm/package.json updated to " + ver);
 	'
+	project-context
+	git add npm/package.json
+	git add docs/project-context.md
+	git commit -m "chore: bump version to v$(VERSION)"
+	git tag "v$(VERSION)"
+	@echo ""
+	@echo "✅ Version bumped and tagged!"
+	@echo "Now run:"
+	@echo "   git push && git push --tags"
+
+# Legacy alias (still works)
+sync-npm-version: bump-version
+
+# Legacy alias (still works)
+sync-npm-version: bump-version
 
 # === Lint target (auto-install staticcheck) ===
 lint:
