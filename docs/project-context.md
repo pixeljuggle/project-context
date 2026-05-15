@@ -1,6 +1,6 @@
 # Project Context
 
-**Estimated tokens:** ~8906
+**Estimated tokens:** ~9451
 
 ## Directory Tree
 
@@ -29,8 +29,6 @@ project-context-cli/
 ├── npm/
 │   ├── bin/
 │   │   └── project-context.js
-│   ├── install.js
-│   ├── package-lock.json
 │   └── package.json
 └── project-context.json
 ```
@@ -94,12 +92,12 @@ jobs:
           go-version: stable
           cache: true
 
-      # Setup Node.js (required for npm publish)
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           registry-url: "https://registry.npmjs.org"
 
+      # 1. Build all binaries with GoReleaser
       - uses: goreleaser/goreleaser-action@v7
         with:
           distribution: goreleaser
@@ -108,15 +106,96 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
 
-      # Auto-publish npm package after successful GoReleaser
-      - name: Publish npm package
+      # 2. Publish the 5 platform-specific optional packages
+      - name: Publish platform packages to npm
         if: startsWith(github.ref, 'refs/tags/v')
-        run: |
-          cd npm
-          npm ci --ignore-scripts
-          npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+
+          publish_platform_pkg() {
+            GOOS=$1
+            GOARCH=$2
+            NODE_OS=$3
+            NODE_ARCH=$4
+            
+            PKG_NAME="@pixeljuggle/project-context-${GOOS}-${GOARCH}"
+            DIR="dist/npm-${GOOS}-${GOARCH}"
+            mkdir -p "$DIR"
+            
+            # Copy the binary built by GoReleaser
+            if [ "$GOOS" = "windows" ]; then
+              cp "dist/project-context_${GOOS}_${GOARCH}/project-context.exe" "$DIR/" || true
+            else
+              cp "dist/project-context_${GOOS}_${GOARCH}/project-context" "$DIR/"
+            fi
+
+            # Create minimal package.json using Node (avoids YAML parsing issues)
+            node -e "
+              const fs = require('fs');
+              const pkg = {
+                name: '${PKG_NAME}',
+                version: '${VERSION}',
+                os: ['${NODE_OS}'],
+                cpu: ['${NODE_ARCH}'],
+                license: 'MIT',
+                repository: {
+                  type: 'git',
+                  url: 'git+https://github.com/pixeljuggle/project-context.git'
+                },
+                files: ['project-context', 'project-context.exe'],
+                publishConfig: { access: 'public' }
+              };
+              fs.writeFileSync('${DIR}/package.json', JSON.stringify(pkg, null, 2) + '\n');
+              console.log('Created ${PKG_NAME}/package.json');
+            "
+            
+            echo "Publishing ${PKG_NAME} v${VERSION}..."
+            npm publish "$DIR" --access public
+          }
+
+          # Publish all platforms
+          publish_platform_pkg "darwin" "arm64" "darwin" "arm64"
+          publish_platform_pkg "darwin" "amd64" "darwin" "x64"
+          publish_platform_pkg "linux" "arm64" "linux" "arm64"
+          publish_platform_pkg "linux" "amd64" "linux" "x64"
+          publish_platform_pkg "windows" "amd64" "win32" "x64"
+
+      # 3. Publish the main router package
+      - name: Publish main npm package
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          cd npm
+
+          # Update main package version
+          npm --no-git-tag-version version $VERSION
+
+          # Dynamically update optionalDependencies to match the new version
+          node -e "
+            const fs = require('fs');
+            let pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            const ver = '$VERSION';
+            pkg.optionalDependencies = {
+              '@pixeljuggle/project-context-darwin-arm64': ver,
+              '@pixeljuggle/project-context-darwin-amd64': ver,
+              '@pixeljuggle/project-context-linux-arm64': ver,
+              '@pixeljuggle/project-context-linux-amd64': ver,
+              '@pixeljuggle/project-context-windows-amd64': ver
+            };
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+            console.log('✅ Updated main package to version ' + ver);
+          "
+
+          # Copy documentation files into the published package
+          cp ../README.md ./
+          cp ../LICENSE ./
+
+          npm ci --ignore-scripts
+          npm publish --access public
 ```
 
 ### .gitignore
@@ -168,6 +247,7 @@ before:
     - go mod tidy
 
 builds:
+  - id: project-context
   - env:
       - CGO_ENABLED=0
     main: ./cmd/project-context
@@ -710,6 +790,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 type Rule struct {
@@ -932,6 +1013,16 @@ func GenerateTreeAndFiles(root string, ignorePatterns []string, rules map[string
 	return treeBuilder.String(), files, nil
 }
 
+// getProjectTitle returns the clean project name for metadata (same logic used for the tree root)
+func getProjectTitle(root string) string {
+	absRoot, _ := filepath.Abs(root)
+	title := filepath.Base(absRoot)
+	if title == "." || title == string(filepath.Separator) {
+		title = "project"
+	}
+	return title
+}
+
 // estimateTokens now actually counts real file content (much more accurate)
 func estimateTokens(tree string, contentFiles []string, root string, maxSizeBytes int64, truncateLines int) string {
 	total := len(tree)
@@ -965,6 +1056,19 @@ func isBinary(data []byte) bool {
 // BuildMarkdown now supports truncate, verbose, accurate tokens, and safe Markdown
 func BuildMarkdown(tree string, contentFiles []string, root string, maxSizeBytes int64, truncateLines int, verbose bool) string {
 	var md strings.Builder
+
+	// === YAML frontmatter metadata (always included) ===
+	title := getProjectTitle(root)
+	timestamp := time.Now().UTC().Format("2006-01-02T15:04:05+00:00")
+
+	md.WriteString(`---
+type: 'Project Context'
+title: ` + title + `
+timestamp: ` + timestamp + `
+---
+
+`)
+
 	md.WriteString("# Project Context\n\n")
 	md.WriteString("**Estimated tokens:** ~" + estimateTokens(tree, contentFiles, root, maxSizeBytes, truncateLines) + "\n\n")
 	md.WriteString("## Directory Tree\n\n")
@@ -1147,126 +1251,51 @@ func contains(slice []string, s string) bool {
 ```js
 #!/usr/bin/env node
 const { spawnSync } = require("node:child_process");
+const os = require("node:os");
 const path = require("node:path");
-const fs = require("node:fs");
 
-const binDir = path.join(__dirname);
-const isWin = process.platform === "win32";
-const binary = path.join(binDir, isWin ? "project-context.exe" : "project-context");
+const platform = os.platform();
+const arch = os.arch();
 
-if (!fs.existsSync(binary)) {
-  console.error("❌ project-context binary not found. Run `npm install` again.");
+// Map Node.js os/platform names → exact optional dependency package name
+const knownPackages = {
+  "darwin arm64": "@pixeljuggle/project-context-darwin-arm64",
+  "darwin x64": "@pixeljuggle/project-context-darwin-amd64",
+  "linux arm64": "@pixeljuggle/project-context-linux-arm64",
+  "linux x64": "@pixeljuggle/project-context-linux-amd64",
+  "win32 x64": "@pixeljuggle/project-context-windows-amd64",
+};
+
+const packageName = knownPackages[`${platform} ${arch}`];
+
+if (!packageName) {
+  console.error(`❌ Unsupported platform: ${platform} ${arch}`);
   process.exit(1);
 }
 
-const result = spawnSync(binary, process.argv.slice(2), {
-  stdio: "inherit",
-  env: { ...process.env },
-});
+try {
+  // require.resolve gives us the exact location of the installed optional package
+  const pkgPath = require.resolve(`${packageName}/package.json`);
+  const binDir = path.dirname(pkgPath);
 
-process.exit(result.status ?? 0);
-```
+  const binaryName = platform === "win32" ? "project-context.exe" : "project-context";
+  const binaryPath = path.join(binDir, binaryName);
 
-### npm/install.js
-
-```js
-#!/usr/bin/env node
-
-const https = require("node:https");
-const fs = require("node:fs");
-const path = require("node:path");
-const zlib = require("node:zlib");
-const tar = require("tar");
-const { pipeline } = require("node:stream/promises");
-
-const binaryName = "project-context";
-const repo = "pixeljuggle/project-context";
-
-async function getLatestVersion() {
-  return new Promise((resolve, reject) => {
-    const options = {
-      headers: { "User-Agent": "project-context-npm-install" },
-    };
-    https
-      .get(
-        "https://api.github.com/repos/pixeljuggle/project-context/releases/latest",
-        options,
-        (res) => {
-          let data = "";
-          res.on("data", (chunk) => (data += chunk));
-          res.on("end", () => {
-            try {
-              const release = JSON.parse(data);
-              const version = release.tag_name.replace(/^v/, "");
-              resolve(version);
-            } catch (_e) {
-              reject(new Error("Failed to parse latest release from GitHub"));
-            }
-          });
-        },
-      )
-      .on("error", reject);
-  });
-}
-
-async function main() {
-  const version = await getLatestVersion();
-  const platform = process.platform;
-  const arch = process.arch;
-
-  const goOs = platform === "win32" ? "windows" : platform;
-  let goArch = arch === "x64" ? "amd64" : arch;
-  if (goArch === "arm") goArch = "arm64";
-
-  const archiveName = `${binaryName}_${version}_${goOs}_${goArch}.tar.gz`;
-  const url = `https://github.com/${repo}/releases/download/v${version}/${archiveName}`;
-
-  const binDir = path.join(__dirname, "bin");
-  fs.mkdirSync(binDir, { recursive: true });
-
-  const targetBinary = platform === "win32" ? `${binaryName}.exe` : binaryName;
-  const targetPath = path.join(binDir, targetBinary);
-
-  console.log(`Downloading ${binaryName} ${version} for ${goOs}_${goArch}...`);
-
-  const response = await new Promise((resolve, reject) => {
-    https
-      .get(url, (res) => {
-        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-          return https.get(res.headers.location, resolve).on("error", reject);
-        }
-        resolve(res);
-      })
-      .on("error", reject);
+  // Forward all arguments to the native binary
+  const result = spawnSync(binaryPath, process.argv.slice(2), {
+    stdio: "inherit",
+    env: { ...process.env },
   });
 
-  if (response.statusCode !== 200) {
-    throw new Error(`Download failed with status ${response.statusCode}\nURL: ${url}`);
-  }
-
-  await pipeline(
-    response,
-    zlib.createGunzip(),
-    tar.extract({
-      cwd: binDir,
-      filter: (header) => path.basename(header) === targetBinary,
-      strip: 0,
-    }),
+  process.exit(result.status ?? 0);
+} catch (error) {
+  console.error(`❌ Failed to find or execute binary for ${packageName}.`);
+  console.error(
+    "This usually means the optional dependency was skipped (--no-optional) or failed to install.",
   );
-
-  if (platform !== "win32") {
-    fs.chmodSync(targetPath, "755");
-  }
-
-  console.log(`${binaryName} ${version} installed successfully!`);
+  console.error("Try: npm install --include=optional");
+  process.exit(1);
 }
-
-main()
-  .then(() => process.exit(0))
-  .catch((err) => {
-    console.error("❌ Failed to install project-context:", err.message);
-    process.exit(1);
-  });
 ```
 
 ### npm/package.json
@@ -1274,7 +1303,7 @@ main()
 ```json
 {
   "name": "@pixeljuggle/project-context",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "Zero-dependency CLI that generates a perfect project-context.md for LLMs, code reviews, or documentation.",
   "repository": {
     "type": "git",
@@ -1285,18 +1314,20 @@ main()
   "bin": {
     "project-context": "bin/project-context.js"
   },
-  "scripts": {
-    "postinstall": "node install.js"
-  },
-  "dependencies": {
-    "tar": "^7.5.15"
-  },
   "files": [
-    "install.js",
-    "bin/project-context.js"
+    "bin/project-context.js",
+    "README.md",
+    "LICENSE"
   ],
   "engines": {
     "node": ">=18"
+  },
+  "optionalDependencies": {
+    "@pixeljuggle/project-context-darwin-arm64": "0.1.1",
+    "@pixeljuggle/project-context-darwin-amd64": "0.1.1",
+    "@pixeljuggle/project-context-linux-arm64": "0.1.1",
+    "@pixeljuggle/project-context-linux-amd64": "0.1.1",
+    "@pixeljuggle/project-context-windows-amd64": "0.1.1"
   }
 }
 ```

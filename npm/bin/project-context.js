@@ -1,20 +1,47 @@
 #!/usr/bin/env node
 const { spawnSync } = require("node:child_process");
+const os = require("node:os");
 const path = require("node:path");
-const fs = require("node:fs");
 
-const binDir = path.join(__dirname);
-const isWin = process.platform === "win32";
-const binary = path.join(binDir, isWin ? "project-context.exe" : "project-context");
+const platform = os.platform();
+const arch = os.arch();
 
-if (!fs.existsSync(binary)) {
-  console.error("❌ project-context binary not found. Run `npm install` again.");
+// Map Node.js os/platform names → exact optional dependency package name
+const knownPackages = {
+  "darwin arm64": "@pixeljuggle/project-context-darwin-arm64",
+  "darwin x64": "@pixeljuggle/project-context-darwin-amd64",
+  "linux arm64": "@pixeljuggle/project-context-linux-arm64",
+  "linux x64": "@pixeljuggle/project-context-linux-amd64",
+  "win32 x64": "@pixeljuggle/project-context-windows-amd64",
+};
+
+const packageName = knownPackages[`${platform} ${arch}`];
+
+if (!packageName) {
+  console.error(`❌ Unsupported platform: ${platform} ${arch}`);
   process.exit(1);
 }
 
-const result = spawnSync(binary, process.argv.slice(2), {
-  stdio: "inherit",
-  env: { ...process.env },
-});
+try {
+  // require.resolve gives us the exact location of the installed optional package
+  const pkgPath = require.resolve(`${packageName}/package.json`);
+  const binDir = path.dirname(pkgPath);
 
-process.exit(result.status ?? 0);
+  const binaryName = platform === "win32" ? "project-context.exe" : "project-context";
+  const binaryPath = path.join(binDir, binaryName);
+
+  // Forward all arguments to the native binary
+  const result = spawnSync(binaryPath, process.argv.slice(2), {
+    stdio: "inherit",
+    env: { ...process.env },
+  });
+
+  process.exit(result.status ?? 0);
+} catch (error) {
+  console.error(`❌ Failed to find or execute binary for ${packageName}.`);
+  console.error(
+    "This usually means the optional dependency was skipped (--no-optional) or failed to install.",
+  );
+  console.error("Try: npm install --include=optional");
+  process.exit(1);
+}

@@ -48,6 +48,27 @@ release-dry-run:
 	@$(call install-tool,goreleaser,github.com/goreleaser/goreleaser/v2@latest)
 	$(GOBIN)/goreleaser check
 
+# === Version sync (single source of truth = git tag) ===
+sync-npm-version:
+	@TAG=$$(git describe --tags --abbrev=0 2>/dev/null || echo "0.0.0"); \
+	VERSION=$${TAG#v}; \
+	echo "🔄 Syncing npm/package.json to version $$VERSION..."; \
+	node -e ' \
+	  const fs = require("fs"); \
+	  let pkg = JSON.parse(fs.readFileSync("npm/package.json", "utf8")); \
+	  const ver = "'$$VERSION'"; \
+	  pkg.version = ver; \
+	  pkg.optionalDependencies = { \
+	    "@pixeljuggle/project-context-darwin-arm64": ver, \
+	    "@pixeljuggle/project-context-darwin-amd64": ver, \
+	    "@pixeljuggle/project-context-linux-arm64": ver, \
+	    "@pixeljuggle/project-context-linux-amd64": ver, \
+	    "@pixeljuggle/project-context-windows-amd64": ver \
+	  }; \
+	  fs.writeFileSync("npm/package.json", JSON.stringify(pkg, null, 2) + "\n"); \
+	  console.log("✅ npm/package.json updated to " + ver); \
+	'
+
 # === Lint target (auto-install staticcheck) ===
 lint:
 	@echo "Running gofmt..."

@@ -21,12 +21,12 @@ jobs:
           go-version: stable
           cache: true
 
-      # Setup Node.js (required for npm publish)
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           registry-url: "https://registry.npmjs.org"
 
+      # 1. Build all binaries with GoReleaser
       - uses: goreleaser/goreleaser-action@v7
         with:
           distribution: goreleaser
@@ -35,12 +35,121 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
 
-      # Auto-publish npm package after successful GoReleaser
-      - name: Publish npm package
+      # 2. Publish the 5 platform-specific optional packages
+      - name: Publish platform packages to npm
         if: startsWith(github.ref, 'refs/tags/v')
-        run: |
-          cd npm
-          npm ci --ignore-scripts
-          npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+
+          publish_platform_pkg() {
+            GOOS=$1
+            GOARCH=$2
+            NODE_OS=$3
+            NODE_ARCH=$4
+            
+            PKG_NAME="@pixeljuggle/project-context-${GOOS}-${GOARCH}"
+            DIR="dist/npm-${GOOS}-${GOARCH}"
+            mkdir -p "$DIR"
+            
+            # Copy the binary built by GoReleaser
+            if [ "$GOOS" = "windows" ]; then
+              cp "dist/project-context_${GOOS}_${GOARCH}/project-context.exe" "$DIR/" || true
+            else
+              cp "dist/project-context_${GOOS}_${GOARCH}/project-context" "$DIR/"
+            fi
+
+            # Create minimal package.json using Node (avoids YAML parsing issues)
+            node -e "
+              const fs = require('fs');
+              const pkg = {
+                name: '${PKG_NAME}',
+                version: '${VERSION}',
+                os: ['${NODE_OS}'],
+                cpu: ['${NODE_ARCH}'],
+                license: 'MIT',
+                repository: {
+                  type: 'git',
+                  url: 'git+https://github.com/pixeljuggle/project-context.git'
+                },
+                files: ['project-context', 'project-context.exe'],
+                publishConfig: { access: 'public' }
+              };
+              fs.writeFileSync('${DIR}/package.json', JSON.stringify(pkg, null, 2) + '\n');
+              console.log('Created ${PKG_NAME}/package.json');
+            "
+            
+            echo "Publishing ${PKG_NAME} v${VERSION}..."
+            npm publish "$DIR" --access public
+          }
+
+          # Publish all platforms
+          publish_platform_pkg "darwin" "arm64" "darwin" "arm64"
+          publish_platform_pkg "darwin" "amd64" "darwin" "x64"
+          publish_platform_pkg "linux" "arm64" "linux" "arm64"
+          publish_platform_pkg "linux" "amd64" "linux" "x64"
+          publish_platform_pkg "windows" "amd64" "win32" "x64"
+
+      # 3. Publish the main router package
+      - name: Publish main npm package
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          cd npm
+          
+          # Use the same sync logic as local development
+          npm --no-git-tag-version version $VERSION
+          node -e '
+            const fs = require("fs");
+            let pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+            const ver = "'$VERSION'";
+            pkg.optionalDependencies = {
+              "@pixeljuggle/project-context-darwin-arm64": ver,
+              "@pixeljuggle/project-context-darwin-amd64": ver,
+              "@pixeljuggle/project-context-linux-arm64": ver,
+              "@pixeljuggle/project-context-linux-amd64": ver,
+              "@pixeljuggle/project-context-windows-amd64": ver
+            };
+            fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2) + "\n");
+          '
+          
+          cp ../README.md ./
+          cp ../LICENSE ./
+          
+          npm ci --ignore-scripts
+          npm publish --access public
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          cd npm
+
+          # Update main package version
+          npm --no-git-tag-version version $VERSION
+
+          # Dynamically update optionalDependencies to match the new version
+          node -e "
+            const fs = require('fs');
+            let pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            const ver = '$VERSION';
+            pkg.optionalDependencies = {
+              '@pixeljuggle/project-context-darwin-arm64': ver,
+              '@pixeljuggle/project-context-darwin-amd64': ver,
+              '@pixeljuggle/project-context-linux-arm64': ver,
+              '@pixeljuggle/project-context-linux-amd64': ver,
+              '@pixeljuggle/project-context-windows-amd64': ver
+            };
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+            console.log('✅ Updated main package to version ' + ver);
+          "
+
+          # Copy documentation files into the published package
+          cp ../README.md ./
+          cp ../LICENSE ./
+
+          npm ci --ignore-scripts
+          npm publish --access public

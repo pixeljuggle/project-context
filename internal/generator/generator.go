@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 type Rule struct {
@@ -229,6 +230,16 @@ func GenerateTreeAndFiles(root string, ignorePatterns []string, rules map[string
 	return treeBuilder.String(), files, nil
 }
 
+// getProjectTitle returns the clean project name for metadata (same logic used for the tree root)
+func getProjectTitle(root string) string {
+	absRoot, _ := filepath.Abs(root)
+	title := filepath.Base(absRoot)
+	if title == "." || title == string(filepath.Separator) {
+		title = "project"
+	}
+	return title
+}
+
 // estimateTokens now actually counts real file content (much more accurate)
 func estimateTokens(tree string, contentFiles []string, root string, maxSizeBytes int64, truncateLines int) string {
 	total := len(tree)
@@ -262,6 +273,19 @@ func isBinary(data []byte) bool {
 // BuildMarkdown now supports truncate, verbose, accurate tokens, and safe Markdown
 func BuildMarkdown(tree string, contentFiles []string, root string, maxSizeBytes int64, truncateLines int, verbose bool) string {
 	var md strings.Builder
+
+	// === YAML frontmatter metadata (always included) ===
+	title := getProjectTitle(root)
+	timestamp := time.Now().UTC().Format("2006-01-02T15:04:05+00:00")
+
+	md.WriteString(`---
+type: 'Project Context'
+title: ` + title + `
+timestamp: ` + timestamp + `
+---
+
+`)
+
 	md.WriteString("# Project Context\n\n")
 	md.WriteString("**Estimated tokens:** ~" + estimateTokens(tree, contentFiles, root, maxSizeBytes, truncateLines) + "\n\n")
 	md.WriteString("## Directory Tree\n\n")

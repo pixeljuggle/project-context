@@ -5,7 +5,8 @@ before:
     - go mod tidy
 
 builds:
-  - env:
+  - id: project-context
+    env:
       - CGO_ENABLED=0
     main: ./cmd/project-context
     goos:

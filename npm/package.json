@@ -11,17 +11,19 @@
   "bin": {
     "project-context": "bin/project-context.js"
   },
-  "scripts": {
-    "postinstall": "node install.js"
-  },
-  "dependencies": {
-    "tar": "^7.5.15"
-  },
   "files": [
-    "install.js",
-    "bin/project-context.js"
+    "bin/project-context.js",
+    "README.md",
+    "LICENSE"
   ],
   "engines": {
     "node": ">=18"
+  },
+  "optionalDependencies": {
+    "@pixeljuggle/project-context-darwin-arm64": "0.1.1",
+    "@pixeljuggle/project-context-darwin-amd64": "0.1.1",
+    "@pixeljuggle/project-context-linux-arm64": "0.1.1",
+    "@pixeljuggle/project-context-linux-amd64": "0.1.1",
+    "@pixeljuggle/project-context-windows-amd64": "0.1.1"
   }
 }
